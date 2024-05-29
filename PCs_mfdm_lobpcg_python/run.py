@@ -18,11 +18,18 @@ from numpy.random import rand
 from pathlib import Path
 from scipy.io import savemat,loadmat
 
-# Usage: 
-# eigen_1p:
-# bandgap:
-# tol_cmp:
-# 
+"""
+    Usage.
+"""
+    
+# eigen_1p: compute frequencies of a single lattice point.
+# bandgap:  compute certain band info (default: all).
+# tol_cmp:  variable tolerance.
+# scal_cmp: variable scalings.
+# pnt_cmp:  variable penalty coefficients.
+# rela_cmp: variable relaxation.
+# pack_cmp: variable packages (numpy,scipy,cupy,cupyx).
+# grid_cmp: variable grid sizes.    
 
 
 # Information of each lattice point: eigenvalues and iterations.
