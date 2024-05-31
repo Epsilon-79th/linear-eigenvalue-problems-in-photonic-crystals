@@ -8,6 +8,10 @@ Created on Sun Apr 28 16:52:44 2024
 # Packages.
 import numpy as np
 import cupy as cp
+
+import os
+import json
+
 import discretization as mfd
 import dielectric as diel
 from time import time
@@ -15,8 +19,6 @@ import eigen_lobpcg
 
 from numpy import pi
 from numpy.random import rand
-from pathlib import Path
-from scipy.io import savemat,loadmat
 
 """
     Usage.
@@ -34,9 +36,17 @@ from scipy.io import savemat,loadmat
 
 # Information of each lattice point: eigenvalues and iterations.
 class bandgap_info:
-    def __init__(self):
-        self.eigen=np.array([[]])
-        self.iters=np.array([[]])
+    def __init__(self,eigen,iters):
+        self.eigen=eigen
+        self.iters=iters        
+    
+# Information of runtime and acceleration.
+class runtime_info:
+    def __init__(self,iters,cputime,gputime):
+        self.iters=iters
+        self.cputime=cputime
+        self.gputime=gputime
+        self.ratio=cputime/gputime
 
 # Global parameters.
 eps=13                      # Dielectric constant.
@@ -87,7 +97,7 @@ def print_and_normalize(lambda_pnt,lambda_re=None):
     n_lambdas=len(lambda_pnt)
     lambda_pnt=scal*np.sqrt(lambda_pnt)
     
-    if not lambda_re:
+    if lambda_re is None:
         # No recomputing process involved.
         for i in range(n_lambdas):
             print("i=",i+1,", frequency=",'%10.6f'%lambda_pnt[i])
@@ -155,22 +165,23 @@ def bandgap(N,d_flag_name,gap,indices=None):
             alphas[i*gap+j,:]=((j+1)*sym_points[i+1,:]+(gap-j-1)*sym_points[i,:])/gap
             
     # Preload. 
-    if not Path("output").exists():
-        Path("output").mkdir()
+    if not os.path.exists("output"):
+        os.mkdir("output")
     
     NP=eval(pack_name[0:2])
-    bandgap_name="output/bandgap_"+d_flag_name+".mat"
+    bandgap_name="output/bandgap_"+d_flag_name+".json"
     var_name=d_flag_name+"_"+str(N)
-    if not Path(bandgap_name).exists():
+    if not os.path.exists(bandgap_name):
         # New lattice bandgap plot.
         print("The bandgap of type ",d_flag_name," has no previous record.")
-        gap_rec=bandgap_info()
-        gap_rec.eigen=NP.zeros((n_pt*gap,m_conv))
-        gap_rec.iters=NP.zeros((n_pt*gap,2))
+        gap_rec=bandgap_info(np.zeros((n_pt*gap,m_conv)),np.zeros((n_pt*gap,2)))        
         gap_lib={var_name:gap_rec}
-        savemat(bandgap_name,gap_lib)
+        
+        with open(bandgap_name,'w') as file:
+            json.dump(gap_lib,file,indent=4)
     else:
-        gap_lib=loadmat(bandgap_name)
+        with open(bandgap_name,'r') as file:
+            gap_lib=json.load(bandgap_name)
         if var_name in gap_lib.keys():
             # Previous record exists.
             print("Lattice type ",d_flag_name," with grid size N=",N,\
@@ -181,10 +192,12 @@ def bandgap(N,d_flag_name,gap,indices=None):
             print("Lattice type ",d_flag_name,\
                   " will be computed with a new grid size N=",N,".")
             gap_rec=bandgap_info()
-            gap_rec.eigen=NP.zeros((n_pt*gap,m_conv))
-            gap_rec.iters=NP.zeros((n_pt*gap,2))
+            gap_rec.eigen=NP.zeros((n_pt*gap,m_conv)).tolist()
+            gap_rec.iters=NP.zeros((n_pt*gap,2)).tolist()
             gap_lib[var_name]=gap_rec
-            savemat(bandgap_name,gap_lib)
+            
+            with open(bandgap_name,'w') as file:
+                json.dump(gap_lib,file,indent=4)
     
     X0=rand(3*n,m_conv+max(10,m_conv))
     options_lobpcg={"pack_name":pack_name,\
@@ -218,12 +231,14 @@ def bandgap(N,d_flag_name,gap,indices=None):
         print("Iterations=",iters[0],", runtime=",'%6.3f'%iters[1],"s.\n")
         lamdba_pnt,lambda_re=print_and_normalize(lambda_pnt,lambda_re)
         
-        gap_rec.eigen[indices[i],:]=lambda_re
-        gap_rec.iters[indices[i],:]=iters
+        gap_rec.eigen[indices[i],:]=lambda_re.tolist()
+        gap_rec.iters[indices[i],:]=iters.tolist()
         
         t_h=time()
         gap_lib[var_name]=gap_rec
-        savemat(bandgap_name,gap_lib)
+        
+        with open(bandgap_name,'w') as file:
+            json.dump(gap_lib,file,indent=4)
         t_o=time()
         print("Gap info library (",d_flag_name,") is updated, file optime=",\
               '%6.3f'%(t_o-t_h),"s.")
@@ -363,26 +378,53 @@ def scal_cmp(N,d_flag_name,scals,alpha=np.array([pi,pi,pi])):
     
     return
 
-def pack_cmp(N,d_flag_name,packs,alpha=np.array([pi,pi,pi])):
+def pack_cmp(Ns,d_flag_name,packs,alpha=np.array([pi,pi,pi])):
     
-    A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(N,d_flag_name,alpha)
-
-    n_packs=len(packs)
-    iters=NP.zeros((n_packs,2))
+    # Packs={gpu_pack, cpu_pack}. 
+    # cpu: numpy,scipy. gpu: cupy,cupyx.
     
-    for i in range(n_packs):
-        options_lobpcg["pack_name"]=packs[i]
+    runtime_name="runtime_"+packs[0]+'_'+packs[1]    
+    
+    if not os.path.exists(runtime_name):
+        runtime_pack_lib={}
+    else:
+        with open(runtime_name,'r') as file:
+            runtime_pack_lib=json.load(file)
 
-        lambda_pnt,lambda_re,iters[i,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
+    n_Ns=len(Ns)
+    iters=NP.zeros((n_Ns,2,2))
+    
+    for i in range(n_Ns):
+        A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(Ns[i],d_flag_name,alpha)
+        
+        options_lobpcg["pack_name"]=packs[0]
+        lambda_pnt,lambda_re,iters[i,0,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
             (A,B,Ms,INV,X0,m_conv,options_lobpcg)
-        print("\nPackage=",packs[i]," is done computing.\n")
+        print("\nN=,",Ns[i],", Package=",packs[0]," is done computing.\n")
         __,__=print_and_normalize(lambda_pnt,lambda_re)
+        
+        options_lobpcg["pack_name"]=packs[1]
+        lambda_pnt,lambda_re,iters[i,1,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
+            (A,B,Ms,INV,X0,m_conv,options_lobpcg)
+        print("\nN=,",Ns[i],", Package=",packs[1]," is done computing.\n")
+        __,__=print_and_normalize(lambda_pnt,lambda_re)
+        
+        runtime_pack_lib["pack_cmp_"+str(Ns[i])]=\
+            runtime_info(iters[i,0,0],iters[i,1,1],iters[i,0,1])
+            
+        with open(runtime_name,'w') as file:
+            json.dump(runtime_pack_lib,file,indent=4)
 
     print("Runtime comparison using different linear algebra packages:")
-    for i in range(n_packs):
-        print("Pakcage=",packs[i],", iterations=",iters[i,0],", time=",\
-              '%5.2f'%iters[i,1],"s.")
+    for i in range(n_Ns):
+        print("N=,",Ns[i],", iterations=",iters[i,0,0],", cputime=",\
+              '%5.2f'%iters[i,1,1],"s, gputime=",'%5.2f'%iters[i,0,1],\
+              "s, ratio=",'%5.2f'%(iters[i,1,1]/iters[i,0,1]),".")
       
+    return
+
+def eps_cmp():
+    
     return
     
 def grid_cmp(Ns,d_flag_name,alpha=np.array([pi,pi,pi])):

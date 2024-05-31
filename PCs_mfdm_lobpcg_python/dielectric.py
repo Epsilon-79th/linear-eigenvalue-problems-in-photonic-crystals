@@ -10,7 +10,9 @@ from numpy.linalg import norm
 from numpy import pi
 from time import time
 from scipy.io import savemat,loadmat
-from pathlib import Path
+
+import os
+import json
 
 """
 
@@ -22,19 +24,20 @@ Part 1: A universal procedure that generates index array corresponding
 
 def dielectric_initialize():
     
-    diel_lib={'CT_sc':np.identity(3),\
-              'CT_bcc':np.array([[0,1,1],[1,0,1],[1,1,0]]),\
-              'CT_fcc':np.array([[-1,1,1],[1,-1,1],[1,1,-1]]),\
-              'sym_sc':np.array([[0,0,0],[pi,0,0],[pi,pi,0],\
-                                 [pi,pi,pi],[0,0,0]]),\
-              'sym_bcc':np.array([[0,0,2*pi],[0,0,0],[pi,pi,pi],\
-                                  [0,0,2*pi],[pi,0,pi],[0,0,0],\
-                                  [0,2*pi,0],[pi,pi,pi],[pi,0,pi]]),\
-              'sym_fcc':np.array([[0,2*pi,0],[pi/2,2*pi,pi/2],[pi,pi,pi],\
-                                  [0,0,0],[0,2*pi,0],[pi,2*pi,0],\
-                                  [3*pi/2,3*pi/2,0]])}
+    diel_lib={'CT_sc':[[1,0,0],[0,1,0],[0,0,1]],\
+              'CT_bcc':[[0,1,1],[1,0,1],[1,1,0]],\
+              'CT_fcc':[[-1,1,1],[1,-1,1],[1,1,-1]],\
+              'sym_sc':[[0,0,0],[pi,0,0],[pi,pi,0],\
+                        [pi,pi,pi],[0,0,0]],\
+              'sym_bcc':[[0,0,2*pi],[0,0,0],[pi,pi,pi],\
+                         [0,0,2*pi],[pi,0,pi],[0,0,0],\
+                         [0,2*pi,0],[pi,pi,pi],[pi,0,pi]],\
+              'sym_fcc':[[0,2*pi,0],[pi/2,2*pi,pi/2],[pi,pi,pi],\
+                         [0,0,0],[0,2*pi,0],[pi,2*pi,0],\
+                         [3*pi/2,3*pi/2,0]]}
     
-    savemat("diel_info.mat",diel_lib)
+    with open("diel_info.json","w") as file:
+        json.dump(diel_lib,file,indent=4)
 
 def dielectric_save_and_load(N,d_flag_name):
     
@@ -47,11 +50,11 @@ def dielectric_save_and_load(N,d_flag_name):
 
     # Check if the directory exists.
     dir_name="dielectric_examples"
-    if not Path(dir_name).exists():
-        Path(dir_name).mkdir()
+    if not os.path.exists(dir_name):
+        os.mkdir(dir_name)
     
     # Determine CT and symmetry points.
-    file_name=dir_name+"/"+d_flag_name+".mat"
+    file_name=dir_name+"/"+d_flag_name+".json"
     if d_flag_name[2]=='_':
         # sc lattice.
         lattice_name=d_flag_name[0:2]
@@ -60,22 +63,29 @@ def dielectric_save_and_load(N,d_flag_name):
         lattice_name=d_flag_name[0:3]
         
     # Preload information.
-    if not Path("diel_info.mat").exists():
+    if not os.path.exists("diel_info.json"):
         dielectric_initialize()
-    diel_lib=loadmat("diel_info.mat")
-    CT=diel_lib["CT_"+lattice_name]
-    sym_points=diel_lib["sym_"+lattice_name]
+        
+    with open('diel_info.json','r') as file:
+        diel_lib=json.load(file)
+        
+    CT=np.array(diel_lib["CT_"+lattice_name])
+    sym_points=np.array(diel_lib["sym_"+lattice_name])
+    # del diel_lib
     
     var_name=file_name+'_'+str(N)
-    if not Path(file_name).exists():
+    if not os.path.exists(file_name):
         # No previous record.
         print("New lattice type ",d_flag_name)
         ind_d=dielectric_index(N,CT,eval("d_flag_"+d_flag_name))
-        ind_lib={var_name:ind_d}
-        savemat(file_name,ind_lib)
+        ind_lib={var_name:ind_d.tolist()}
+        
+        with open(file_name,'w') as file:
+            json.dump(ind_lib,file,indent=4)
     else:
-        ind_lib=loadmat(file_name)        
-        if var_name in ind_lib.keys():
+        with open(file_name,'r') as file:
+            ind_lib=json.load(file)        
+        if var_name in ind_lib:
             # previous record exists.
             print("Lattice type ",d_flag_name," with grid size N=",N," already exists.")
             ind_d=ind_lib[var_name]
@@ -83,8 +93,9 @@ def dielectric_save_and_load(N,d_flag_name):
             # New grid size.
             print("New grid size=",N," for lattice type",d_flag_name)
             ind_d=dielectric_index(N,CT,eval("d_flag_"+d_flag_name))
-            ind_lib[var_name]=ind_d
-            savemat(file_name,ind_lib)
+            ind_lib[var_name]=ind_d.tolist()
+            with open(file_name,'r') as file:
+                json.dump(ind_lib,file,indent=4)
 
     t_o=time()
     print("Dielectric matrix done, ",'%6.3f'%(t_o-t_h),"s elapsed.")
@@ -268,3 +279,6 @@ end
 
 end
 """
+
+
+

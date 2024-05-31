@@ -220,7 +220,7 @@ def fft_blocks(N,k,CT,alpha=None):
     D02=kron_diag(np.ones(N),kron_diag(D1,np.ones(N)))
     D03=kron_diag(D1,np.ones(N*N))
     
-    if not alpha:
+    if alpha is None:
         Di=np.hstack((kron_diag(np.ones(N*N),D0),\
                   kron_diag(np.ones(N),kron_diag(D0,np.ones(N))),\
                   kron_diag(D0,np.ones(N*N))))

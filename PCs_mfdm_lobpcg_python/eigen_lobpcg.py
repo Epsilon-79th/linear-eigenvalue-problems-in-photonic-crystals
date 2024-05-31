@@ -259,9 +259,10 @@ def PCs_mfd_lobpcg(A,B,Ms,INV,X0,m_conv,\
     lambdas_re=(NP.diag(AMAX)/NP.diag(MUL(X_.T.conj(),X_))).real    
     
     t_o=time()
-    print('%6.3f'%(t_o-t_h),"s elapsed.")
+    t_tot=t_o-t_h
+    print('%6.3f'%t_tot,"s elapsed.")
     
-    return lambdas[0:m_conv]-shift,lambdas_re,iter_,X
+    return lambdas[0:m_conv]-shift,lambdas_re,np.array([iter_,t_tot]),X
 
 
 
