@@ -6,11 +6,23 @@ Procedures in Mimetic Finite Difference Discretization.
 
 import numpy as np
 import cupy as cp
-import cupyx.scipy as cpx
+from cupyx.scipy.fft import fftn,ifftn
 
-import time
-import dielectric as diel
 from numpy import pi
+from gpu_opts import arrtype
+
+# FFT options. (cpu/gpu)
+fft3d_cpu=lambda x: np.fft.fftn(x,axes=(0,1,2))
+ifft3d_cpu=lambda x: np.fft.ifftn(x,axes=(0,1,2))
+
+#fft3d_gpu=lambda x: cp.fft.fftn(x,axes=(0,1,2))
+#ifft3d_gpu=lambda x: cp.fft.ifftn(x,axes=(0,1,2))
+
+fft3d_gpu=lambda x: fftn(x,axes=(0,1,2))
+ifft3d_gpu=lambda x: ifftn(x,axes=(0,1,2))
+
+#fft3d_gpu=lambda x: fftn(x,axes=(0,1,2),overwrite_x=True)
+#ifft3d_gpu=lambda x: ifftn(x,axes=(0,1,2),overwrite_x=True)
 
 """
 Auxiliary procedures
@@ -34,40 +46,17 @@ def scalar_prod(x,ind,c=None):
         x[ind]*=c
     
     return x
-
-def norm_gpu(X,pack_name="np"):
     
-    # Input: matrix X.
-    # Output: Frobenius norm.
+def res_comp(A,Ms,lambda0,X):
     
-    NP=eval(pack_name[0:2])
-    if X.ndim==1 or NP.size(X,1)==1:
-        return NP.linalg.norm(X)
-    else:
-        return NP.sqrt((NP.trace(NP.dot(X.T.conj(),X))).real)
-
-def norms_gpu(X,pack_name="np"):
-    
-    # Input: multicolumn vector X.
-    # Output: an array containing norm of each column.
-    
-    NP=eval(pack_name[0:2])
-    if X.ndim==1 or NP.size(X,1)==1:
-        return NP.linalg.norm(X)
-    else:
-        return NP.sqrt((NP.diag(NP.dot(X.T.conj(),X))).real)
-    
-def res_comp(A,Ms,lambda0,X,pack_name="np"):
-    
-    if pack_name[0:2]=="cp":
-        A=cp.asarray(A)
+    NP=arrtype(X)
         
-    if type(Ms)==tuple:
+    if type(Ms)==list or tuple:
         diels=scalar_prod
     else:
         diels=x_mul_y
 
-    return A_fft(diels(A_fft(X,-A.conj(),pack_name),Ms),A,pack_name)-lambda0*X
+    return A_fft(diels(A_fft(X,-A.conj()),Ms),A)-lambda0*X
     
 """
 Basic operations.
@@ -80,6 +69,7 @@ diag_circulant_complex: return the FFT diagonal blocks of a circulant matrix.
 diag_circulant_adjoint: return the FFT diagonal blocks of AA', where A is circulant.
 inverse_3_times_3_block: return the inverse of a 3*3 matrix block, each block is diagonal.
 
+FFT3d, IFFT3d: a standard FFT,IFFT along three dimensions.
 H_fft, A_fft: implement sparse matrix multiplication via FFT.
 
 """
@@ -88,16 +78,19 @@ H_fft, A_fft: implement sparse matrix multiplication via FFT.
 Scaling: a=2*pi.
 """
 
-def kron_diag(A,B,pack_name="np"):
+def kron_diag(A,B):
 
     # Input: array A, B.
     # Output: kronecker product of diag(A)\otimes diag(B).
 
-    n=len(A)
-    m=len(B)
+    n,m=len(A),len(B)
     A=A.reshape(1,n)
     B=B.reshape(m,1)
-    C=eval(pack_name[0:2]).dot(B,A)    
+    
+    if isinstance(A,cp.ndarray):
+        C=cp.dot(B,A)
+    else:
+        C=np.dot(B,A)
 
     return C.reshape(m*n,order='F')
 
@@ -117,8 +110,6 @@ def mfd_stencil(k,ind):
             mfd_mat[i][j]=mfd_mat[i-1][j]*w
     
     return np.linalg.solve(mfd_mat,mfd_coef)
-
-
 
 def diag_circulant_complex(sten,L,ind,N):
     
@@ -206,8 +197,7 @@ def fft_blocks(N,k,CT,alpha=None):
     # OPTION: If alpha appears in the input then output returns a complete FFT
     #         block A,B. Otherwise D,Di are returned.
     
-    h=2*pi/N
-    alpha=alpha/(2*pi)
+    h=2*pi/N    
     n=N**3
     
     fd_stencil_0=mfd_stencil(k,0)
@@ -231,6 +221,7 @@ def fft_blocks(N,k,CT,alpha=None):
             
         return D,Di
     else:
+        alpha=alpha/(2*pi)
         A=np.hstack((CT[0][0]*D01+CT[0][1]*D02+CT[0][2]*D03+\
                         1j*alpha[0]*kron_diag(np.ones(N*N),D0),\
                      CT[1][0]*D01+CT[1][1]*D02+CT[1][2]*D03+\
@@ -241,8 +232,7 @@ def fft_blocks(N,k,CT,alpha=None):
         B=(np.hstack(((A[0:n]*A[0:n].conj()).real,\
                       (A[n:2*n]*A[n:2*n].conj()).real,\
                       (A[2*n:]*A[2*n:].conj()).real)),\
-           np.hstack((A[0:n].conj()*A[n:2*n],A[0:n].conj()*A[2*n:],A[n:2*n].conj()*A[2*n:])))
-    
+           np.hstack((A[0:n].conj()*A[n:2*n],A[0:n].conj()*A[2*n:],A[n:2*n].conj()*A[2*n:])))    
         return A,B
 
 # Relaxation parameters: shift, penalty and deflation.
@@ -250,14 +240,14 @@ def set_relaxation(N,alpha):
     
     nrm_alpha=np.linalg.norm(alpha)
     if nrm_alpha>pi/5:
-        opt=(0,0.35)
+        opt=(0,0.3)
         pnt=2*N
     elif nrm_alpha==0:
-        opt=(1/(4*pi)/N,0.4)
+        opt=(1.0/(4.0*pi)/N,0.35)
         pnt=2*N
     else:
         opt=(nrm_alpha,0.4)
-        pnt=2*N
+        pnt=2*N/nrm_alpha**2
     
     return opt,pnt
     
@@ -270,57 +260,45 @@ Warning: If input is an 1D array, both H_fft and A_fft output a 2D array
 
 """
 
-def H_fft(X,DIAG,pack_name="np"):
+def H_fft(X,DIAG):
     
     # Hermitian matrix multiplication done by FFT.
     # Input: X (multicolumn vectors to be manipulated)
     #        DIAG is a cell that stores the diagonals of 3*3 blocks.
     
-    # pack_name: support only "np","sc","cp","cpx"
-    
     # Output: HX, H*X.
     
-    FFT=eval(pack_name+".fft")
+    NP=arrtype(X)
+    if NP==np:
+        FFT,IFFT=fft3d_cpu,ifft3d_cpu
+    else:
+        FFT,IFFT=fft3d_gpu,ifft3d_gpu
     
     if X.ndim==1:
         n,m=len(X),1
     else:
-        n,m=eval(pack_name[0:2]).shape(X)
+        n,m=X.shape
     n=round(n/3)
     N=round(n**(1/3))
     
-    HX=X.reshape(N,N,N,3*m,order='F')
-    HX=FFT.fftn(HX,axes=(0,1,2))    
-    HX=HX.reshape(3*n,m,order='F')
+    HX=FFT(X.reshape(N,N,N,3*m,order='F')).reshape(3*n,m,order='F')
     
-    """
-    HX1=x_mul_y(DIAG[0][0:n],HX[0:n,:])+x_mul_y(DIAG[1][0:n],HX[n:2*n,:])\
-            +x_mul_y(DIAG[1][n:2*n],HX[2*n:,:])
-    HX2=x_mul_y(np.conj(DIAG[1][0:n]),HX[0:n,:])+x_mul_y(DIAG[0][n:2*n],HX[n:2*n,:])\
-            +x_mul_y(DIAG[1][2*n:],HX[2*n:,:])
-    HX3=x_mul_y(np.conj(DIAG[1][n:2*n]),HX[0:n,:])+x_mul_y(DIAG[0][2*n:],HX[2*n:,:])\
-            +x_mul_y(np.conj(DIAG[1][2*n:]),HX[n:2*n,:])
-    
-    HX[0:n,:]=HX1
-    HX[n:2*n,:]=HX2
-    HX[2*n:,:]=HX3
-    """
-    
-    VM=eval(pack_name[0:2]+".vstack")
+    VM=NP.vstack
     HX=VM((x_mul_y(DIAG[0][0:n],HX[0:n,:])+x_mul_y(DIAG[1][0:n],HX[n:2*n,:])\
-            +x_mul_y(DIAG[1][n:2*n],HX[2*n:,:]),\
+                   +x_mul_y(DIAG[1][n:2*n],HX[2*n:,:]),\
            x_mul_y(DIAG[1][0:n].conj(),HX[0:n,:])+x_mul_y(DIAG[0][n:2*n],HX[n:2*n,:])\
                    +x_mul_y(DIAG[1][2*n:],HX[2*n:,:]),\
            x_mul_y(DIAG[1][n:2*n].conj(),HX[0:n,:])+x_mul_y(DIAG[0][2*n:],HX[2*n:,:])\
                    +x_mul_y(DIAG[1][2*n:].conj(),HX[n:2*n,:])))
     
-    HX=HX.reshape(N,N,N,3*m,order='F')
-    HX=FFT.ifftn(HX,axes=(0,1,2)) 
-    HX=HX.reshape(3*n,m,order='F')
+    HX=IFFT(HX.reshape(N,N,N,3*m,order='F')).reshape(3*n,m,order='F')
+    
+    if X.ndim==1:
+        HX=HX.flatten()
 
     return HX
 
-def A_fft(X,D,pack_name="np"):
+def A_fft(X,D):
     
     # Matrix multiplication of A done by FFT.
     # Input: X (multicolumn vectors to be manipulated)
@@ -330,40 +308,28 @@ def A_fft(X,D,pack_name="np"):
     
     # Output: AX, A*X.
     
-    FFT=eval(pack_name+".fft")
+    NP=arrtype(X)
+    if NP==np:
+        FFT,IFFT=fft3d_cpu,ifft3d_cpu
+    else:
+        FFT,IFFT=fft3d_gpu,ifft3d_gpu
     
     if X.ndim==1:
         n,m=len(X),1
     else:
-        n,m=eval(pack_name[0:2]).shape(X)
+        n,m=X.shape
     n=round(n/3)
     N=round(n**(1/3))
     
-    AX=X.reshape(N,N,N,3*m,order='F')
-    AX=FFT.fftn(AX,axes=(0,1,2))
-    AX=AX.reshape(3*n,m,order='F')
+    AX=FFT(X.reshape(N,N,N,3*m,order='F')).reshape(3*n,m,order='F')
     
-    """
-    
-    AX1=-x_mul_y(D[2*n:],AX[n:2*n,:])+x_mul_y(D[n:2*n],AX[2*n:,:])
-    AX2=x_mul_y(D[2*n:],AX[0:n,:])-x_mul_y(D[0:n],AX[2*n:,:])
-    AX3=-x_mul_y(D[n:2*n],AX[0:n,:])+x_mul_y(D[0:n],AX[n:2*n,:])
-    
-    AX[0:n]=AX1
-    AX[n:2*n]=AX2
-    AX[2*n:]=AX3
-    
-    """
-    
-    VM=eval(pack_name[0:2]+".vstack")
+    VM=NP.vstack
     AX=VM((-x_mul_y(D[2*n:],AX[n:2*n,:])+x_mul_y(D[n:2*n],AX[2*n:,:]),\
            x_mul_y(D[2*n:],AX[0:n,:])-x_mul_y(D[0:n],AX[2*n:,:]),\
            -x_mul_y(D[n:2*n],AX[0:n,:])+x_mul_y(D[0:n],AX[n:2*n,:])))
     
-    AX=AX.reshape(N,N,N,3*m,order='F')
-    AX=FFT.ifftn(AX,axes=(0,1,2))
-    AX=AX.reshape(3*n,m,order='F')
-    
+    AX=IFFT(AX.reshape(N,N,N,3*m,order='F')).reshape(3*n,m,order='F')
+
     if X.ndim==1:
         AX=AX.flatten()
     

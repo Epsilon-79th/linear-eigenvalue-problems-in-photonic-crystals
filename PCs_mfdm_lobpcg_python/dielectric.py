@@ -6,13 +6,21 @@ Dielectric coefficient.
 """
 
 import numpy as np
-from numpy.linalg import norm
 from numpy import pi
 from time import time
-from scipy.io import savemat,loadmat
 
-import os
-import json
+from my_norm import norm,norms
+    
+import os,json
+
+"""
+Info of prepared examples.
+"""
+
+eps_eg={"sc_curv":13,\
+        "bcc_single_gyroid":16,\
+        "bcc_double_gyroid":16,\
+        "fcc":15}
 
 """
 
@@ -55,12 +63,7 @@ def dielectric_save_and_load(N,d_flag_name):
     
     # Determine CT and symmetry points.
     file_name=dir_name+"/"+d_flag_name+".json"
-    if d_flag_name[2]=='_':
-        # sc lattice.
-        lattice_name=d_flag_name[0:2]
-    else:
-        # bcc or fcc lattice.
-        lattice_name=d_flag_name[0:3]
+    lattice_name=d_flag_name.split('_')[0]
         
     # Preload information.
     if not os.path.exists("diel_info.json"):
@@ -94,7 +97,7 @@ def dielectric_save_and_load(N,d_flag_name):
             print("New grid size=",N," for lattice type",d_flag_name)
             ind_d=dielectric_index(N,CT,eval("d_flag_"+d_flag_name))
             ind_lib[var_name]=ind_d.tolist()
-            with open(file_name,'r') as file:
+            with open(file_name,'w') as file:
                 json.dump(ind_lib,file,indent=4)
 
     t_o=time()
@@ -190,12 +193,12 @@ def d_flag_sc_flat2(e):
 Part 3: Distance functions of body centered cubic (BCC) lattice.
 
 """
+
+# Gyroid function
+g=lambda r: np.sin(2*pi*r[0])*np.cos(2*pi*r[1])+np.sin(2*pi*r[1])*np.cos(2*pi*r[2])\
+                +np.sin(2*pi*r[2])*np.cos(2*pi*r[0])
        
 def d_flag_bcc_single_gyroid(e):
-    
-    pi=np.pi
-    g=lambda r: np.sin(2*pi*r[0])*np.cos(2*pi*r[1])+np.sin(2*pi*r[1])*np.cos(2*pi*r[2])\
-                +np.sin(2*pi*r(3))*np.cos(2*pi*r(1));
     
     if g(e)>1.1:
         return 1
@@ -203,10 +206,6 @@ def d_flag_bcc_single_gyroid(e):
         return 0
     
 def d_flag_bcc_double_gyroid(e):
-    
-    pi=np.pi
-    g=lambda r: np.sin(2*pi*r[0])*np.cos(2*pi*r[1])+np.sin(2*pi*r[1])*np.cos(2*pi*r[2])\
-                +np.sin(2*pi*r(3))*np.cos(2*pi*r(1));
     
     if np.abs(g(e))>1.1:
         return 1
@@ -220,7 +219,7 @@ Part 4: Distance functions of face centered cubic (FCC) lattice.
 
 """
 
-"""
+
 def d_flag_fcc(e):
     
     a1=np.array([0,1/2,1/2])
@@ -229,21 +228,22 @@ def d_flag_fcc(e):
 
     cnt=(a1+a2+a3)/4
                 
-    tran1=[zeros(3,1),eye(3),[0;1;1],[1;0;1],[1;1;0],[1;1;1],...
-       [0;1/2;1/2],[1/2;0;1/2],[1/2;1/2;0],[1;1/2;1/2],[1/2;1;1/2],[1/2;1/2;1],...
-       cnt,cnt+a1,cnt+a2,cnt+a3];
-    tran2=[np.zeros(3,1),a1,a2,a3]; 
+    tran1=np.array([[0]*3,[1,0,0],[0,1,0],[0,0,1],[0,1,1],[1,0,1],[1,1,0],[1,1,1],\
+           [0,1/2,1/2],[1/2,0,1/2],[1/2,1/2,0],[1,1/2,1/2],[1/2,1,1/2],[1/2,1/2,1],\
+            cnt.tolist(),(cnt+a1).tolist(),(cnt+a2).tolist(),(cnt+a3).tolist()])
+    
+    tran2=np.array([[0]*3,a1.tolist(),a2.tolist(),a3.tolist()])
 
-    r=0.12;
-    b=0.11;
+    r,b=0.12,0.11
 
-    o1,d1,c1=cnt/2,cnt/2,norm(d1)        
+    o1,d1=cnt/2,cnt/2
+    c1=norm(d1)        
     d1=d1/c1
     o2,d2=(a1+cnt)/2,(a1-cnt)/2
     c2=norm(d2)
-    d2=d2/c2;
+    d2=d2/c2
     
-    o3,d3=(a2+cnt)/2,d3=(a2-cnt)/2
+    o3,d3=(a2+cnt)/2,(a2-cnt)/2
     c3=norm(d3)
     d3=d3/c3
     o4,d4=(a3+cnt)/2,(a3-cnt)/2
@@ -252,33 +252,25 @@ def d_flag_fcc(e):
 
     X=e-tran1
     
-    if (diag(X'*X)-r^2)<0 || ...
-   ell(e,o1,b,c1,d1,tran2) || ...
-   ell(e,o2,b,c2,d2,tran2) || ...
-   ell(e,o3,b,c3,d3,tran2) || ...
-   ell(e,o4,b,c4,d4,tran2)
-    flag=1;
-else
-    flag=0;
-end
+    if np.any(norms(X.T)<r) or ell(e,o1,b,c1,d1,tran2) or ell(e,o2,b,c2,d2,tran2) \
+        or ell(e,o3,b,c3,d3,tran2) or ell(e,o4,b,c4,d4,tran2):
+        return 1
+    else:
+        return 0
 
-end
 
-function val=ell(x,cnt,b,c,d,tran)
+def ell(x,cnt,b,c,d,tran):
 
-X=x-(cnt+tran);
-a=sqrt(b^2+c^2);
-L1=(X'*d).^2;
-L2=diag(X'*X)-L1;
+    X=x-(cnt+tran)
+    a=np.sqrt(b*b+c*c)
+    L1=np.dot(X,d)**2
+    L2=norms(X.T)-L1
 
-if min(L1/(a^2)+L2/(b^2))<1
-   val=1;
-else
-    val=0;
-end
+    if min(L1/(a**2)+L2/(b**2))<1:
+        return True
+    else:
+        return False
 
-end
-"""
 
 
 

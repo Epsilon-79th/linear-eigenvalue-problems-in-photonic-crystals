@@ -1,61 +1,45 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Apr 28 16:52:44 2024
-
-@author: 11034
-"""
+#
+# Created on 2024-04-28 (Sunday) at 16:52:44
+#
+# Author: Epsilon-79th
+#
+# Usage: Basic operations and debugging for calculations of photonic crystal bandgaps.
+#
 
 # Packages.
+from time import time
+import os,json
+
 import numpy as np
 import cupy as cp
 
-import os
-import json
-
 import discretization as mfd
 import dielectric as diel
-from time import time
-import eigen_lobpcg
+
+from eigen_lobpcg import PCs_mfd_lobpcg_cpu, PCs_mfd_lobpcg_gpu
+from eigen_solver import PCs_mfd_lobpcg
 
 from numpy import pi
 from numpy.random import rand
+from gpu_opts import norm,owari_cuda
 
-"""
-    Usage.
-"""
-    
-# eigen_1p: compute frequencies of a single lattice point.
+# eigen_1p: compute frequencies of a_fft single lattice point.
 # bandgap:  compute certain band info (default: all).
 # tol_cmp:  variable tolerance.
 # scal_cmp: variable scalings.
 # pnt_cmp:  variable penalty coefficients.
 # rela_cmp: variable relaxation.
 # pack_cmp: variable packages (numpy,scipy,cupy,cupyx).
-# grid_cmp: variable grid sizes.    
-
-
-# Information of each lattice point: eigenvalues and iterations.
-class bandgap_info:
-    def __init__(self,eigen,iters):
-        self.eigen=eigen
-        self.iters=iters        
-    
-# Information of runtime and acceleration.
-class runtime_info:
-    def __init__(self,iters,cputime,gputime):
-        self.iters=iters
-        self.cputime=cputime
-        self.gputime=gputime
-        self.ratio=cputime/gputime
+# grid_cmp: variable grid sizes.
+# eps_cmp:  variable epsilons, dielectric coefficients.
 
 # Global parameters.
-eps=13                      # Dielectric constant.
-k=1                         # Stencil length.
-m_conv=15                   # Desired eigenpairs.
-scal=1                      # Scaling coefficient.
-tol=1e-4                    # Tolerance.
-pack_name="cpx"             # Linear algebra package.
-NP=eval(pack_name[0:2])
+EPS=13                      # Dielectric constant.
+K=1                         # Stencil length.
+M_CONV=15                   # Desired eigenpairs.
+SCAL=1                      # SCALing coefficient.
+TOL=1e-4                    # Tolerance.
 
 """
 
@@ -63,98 +47,95 @@ Part 0: Initialization, print.
 
 """
 
-# Trivial operations in matrix assembling.
-def uniform_initialization(N,d_flag_name,alpha):
+
+def uniform_initialization(n, d_flag_name, alpha, gpu_opt=True):
+    """
+    Trivial operations in matrix assembling.
+    """
+    t_h = time()
+
+    relax_opt, pnt = mfd.set_relaxation(n, alpha)
+    diel_ind, ct, __ = diel.dielectric_save_and_load(n, d_flag_name)
+    a_fft,b_fft=mfd.fft_blocks(n,K,ct,alpha)
+    inv_fft = mfd.inverse_3_times_3_B(b_fft, pnt, relax_opt[0])
+
+    a_fft /= SCAL
+    b_fft = (pnt * b_fft[0] / SCAL / SCAL, pnt * b_fft[1] / SCAL / SCAL)
+    inv_fft = (inv_fft[0] * SCAL * SCAL, inv_fft[1] * SCAL * SCAL)
+    m = round(M_CONV * relax_opt[1]) + M_CONV
+    x0 = rand(3 * n**3, m)
     
-    t_h=time()    
+    if gpu_opt:
+        a_fft, b_fft, inv_fft, x0 = cp.asarray(a_fft), cp.asarray(b_fft),\
+                                    cp.asarray(inv_fft), cp.asarray(x0)
     
-    relax_opt,pnt=mfd.set_relaxation(N,alpha)
-    M_ind,CT,__=diel.dielectric_save_and_load(N,d_flag_name)
-    #print("Number of d_indexes=",len(M_ind))
-        
-    A,B=mfd.fft_blocks(N,k,CT,alpha)
-    INV=mfd.inverse_3_times_3_B(B,pnt)
+    t_o = time()
+    print("Matrix blocks done, ", '%6.3f' % (t_o - t_h), "s elapsed.")
     
-    A/=scal
-    B=(pnt*B[0]/scal/scal,pnt*B[1]/scal/scal)
-    INV=(INV[0]*scal*scal,INV[1]*scal*scal)
-    
-    options_lobpcg={"shift":relax_opt[0],\
-                    "pack_name":pack_name,\
-                    "iter_max":1000,\
-                    "tol":tol/scal/scal}
-    
-    m=round(m_conv*relax_opt[1])+m_conv
-    X0=rand(3*N**3,m)
-    t_o=time()
-    print("Matrix blocks done, ",'%6.3f'%(t_o-t_h),"s elapsed.")
-    
-    return A,B,(M_ind,1/eps),INV,X0,options_lobpcg
+    return a_fft, b_fft, [diel_ind, 1 / EPS], inv_fft, x0, relax_opt[0]
+
 
 # Print and return normalized frequencies.
-def print_and_normalize(lambda_pnt,lambda_re=None):
+def print_and_normalize(lambda_pnt,lambda_re,scal=SCAL):
     
     n_lambdas=len(lambda_pnt)
     lambda_pnt=scal*np.sqrt(lambda_pnt)
     
-    if lambda_re is None:
-        # No recomputing process involved.
-        for i in range(n_lambdas):
-            print("i=",i+1,", frequency=",'%10.6f'%lambda_pnt[i])
-        return lambda_pnt
-    else:
-        if len(lambda_re)!=n_lambdas:
-            ValueError("Number of penalized and recomputed eigenvalues doesn't match")
-        lambda_re=scal*np.sqrt(lambda_re)
-        for i in range(n_lambdas):
-            print("i=",i+1,", lambda_pnt=",'%10.6f'%lambda_pnt[i],\
-                  ", lambda_re=",'%10.6f'%lambda_re[i],\
-                  ", deviation=",'%6.3e'%(abs(lambda_pnt[i]-lambda_re[i])))
-        return lambda_pnt,lambda_re
+    if len(lambda_re)!=n_lambdas:
+        ValueError("Number of penalized and recomputed eigenvalues doesn't match")
+    lambda_re=scal*np.sqrt(lambda_re)
+    for i in range(n_lambdas):
+        print("i=",i+1,", lambda_pnt=",'%10.6f'%lambda_pnt[i],\
+              ", lambda_re=",'%10.6f'%lambda_re[i],\
+              ", deviation=",'%6.3e'%(abs(lambda_pnt[i]-lambda_re[i])))
+    return lambda_pnt,lambda_re
 
 """
 
-Part I: Compute a single lattice point, certain lattice points (bandgap).
+Part I: Compute a_fft single lattice point, certain lattice points (bandgap).
 
 """
 
 # Compute eigenvalues at one SINGLE lattice vector.
-def eigen_1p(N,d_flag_name,alpha):
+def eigen_1p(n,d_flag_name,alpha):
 
-    A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(N,d_flag_name,alpha)
+    a_fft,b_fft,diels,inv_fft,x0,shift=uniform_initialization(n,d_flag_name,alpha)
 
-    lambda_pnt,lambda_re,__,X=eigen_lobpcg.PCs_mfd_lobpcg(A,B,Ms,\
-            INV,X0,m_conv,options_lobpcg)
-    del X0
+    lambda_pnt,lambda_re,__,eigvec=PCs_mfd_lobpcg(a_fft,b_fft,diels,\
+            inv_fft,x0,M_CONV,tol=TOL/SCAL/SCAL,shift=shift)
+    del x0
     
-    print("N=",N,", lattice type:",d_flag_name,", alpha=[",\
+    print("n=",n,", lattice type:",d_flag_name,", alpha=[",\
           '%5.2f'%(alpha[0]/pi),'%5.2f'%(alpha[1]/pi),'%5.2f'%(alpha[2]/pi),\
           "] pi.")
     
     # Print, residual.
-    for i in range(m_conv):
-        l1=scal*np.sqrt(lambda_pnt[i])
-        l2=scal*np.sqrt(lambda_re[i])
-        r=mfd.res_comp(A,Ms,lambda_re[i],X[:,i],options_lobpcg["pack_name"])
+    for i in range(M_CONV):
+        l1=SCAL*np.sqrt(lambda_pnt[i])
+        l2=SCAL*np.sqrt(lambda_re[i])
+        r=mfd.res_comp(a_fft,diels,lambda_re[i],eigvec[:,i])
         print("i=",i+1,", ",'%10.6f'%l1,'%10.6f'%l2,'%6.3e'%(abs(l1-l2)),", res=",\
-              '%6.3e'%(mfd.norm_gpu(r)))
+              '%6.3e'%norm(r))
             
     return
   
-# Compute the complete bandgap w.r.t to a given lattice material with 
+# Compute the complete bandgap w.r.t to a_fft given lattice material with 
 # certain grid size. (uniformly tensor division)
-def bandgap(N,d_flag_name,gap,indices=None):
+def bandgap(n,d_flag_name,gap,indices=None):
     
-    n=N**3
-    M_ind,CT,sym_points=diel.dielectric_save_and_load(N,d_flag_name)
-    D,Di=mfd.fft_blocks(N,k,CT)
-    __,n_pt=np.size(sym_points)
+    nn=n**3
+    diel_ind,ct,sym_points=diel.dielectric_save_and_load(n,d_flag_name)
+    diels=[diel_ind,1/diel.eps_eg[d_flag_name]]
+    del diel_ind
+    
+    d_fft,di_fft=mfd.fft_blocks(n,K,ct)
+    n_pt,__=sym_points.shape
     n_pt-=1
     
     if not indices:
         # Default: compute the complete bandgap.
         indices=list(range(n_pt*gap))
-    if max(indices)>n_pt*gap or min(indices)<1:
+    if max(indices)>=n_pt*gap or min(indices)<0:
         ValueError("Index is non-positive or is incompatible with gap size.")
     
     # Discrete lattice points.
@@ -164,83 +145,104 @@ def bandgap(N,d_flag_name,gap,indices=None):
         for j in range(gap-1):
             alphas[i*gap+j,:]=((j+1)*sym_points[i+1,:]+(gap-j-1)*sym_points[i,:])/gap
             
-    # Preload. 
+    # Preloading.
+   
     if not os.path.exists("output"):
         os.mkdir("output")
     
-    NP=eval(pack_name[0:2])
+    # Filename:
     bandgap_name="output/bandgap_"+d_flag_name+".json"
-    var_name=d_flag_name+"_"+str(N)
+    
+    # Keywords:
+    var_name_it=d_flag_name+"_"+str(n)+"_iterations"
+    var_name_fq=d_flag_name+"_"+str(n)+"_frequencies"
+    
     if not os.path.exists(bandgap_name):
         # New lattice bandgap plot.
+        
         print("The bandgap of type ",d_flag_name," has no previous record.")
-        gap_rec=bandgap_info(np.zeros((n_pt*gap,m_conv)),np.zeros((n_pt*gap,2)))        
-        gap_lib={var_name:gap_rec}
+        
+        gap_rec_it,gap_rec_fq=[[0]*2]*(n_pt*gap),[[0]*M_CONV]*(n_pt*gap)
+        gap_lib={var_name_it:gap_rec_it,\
+                 var_name_fq:gap_rec_fq}
         
         with open(bandgap_name,'w') as file:
             json.dump(gap_lib,file,indent=4)
     else:
         with open(bandgap_name,'r') as file:
-            gap_lib=json.load(bandgap_name)
-        if var_name in gap_lib.keys():
+            gap_lib=json.load(file)
+        if var_name_it in gap_lib.keys():
             # Previous record exists.
-            print("Lattice type ",d_flag_name," with grid size N=",N,\
-                  " has a previous record.")
-            gap_rec=gap_lib[var_name]
+            
+            print("Lattice type ",d_flag_name," with grid size n=",n,\
+                  " has a_fft previous record.")     
+                   
+            gap_rec_it,gap_rec_fq=gap_lib[var_name_it],gap_lib[var_name_fq]
         else:
             # New grid size.
+            
             print("Lattice type ",d_flag_name,\
-                  " will be computed with a new grid size N=",N,".")
-            gap_rec=bandgap_info()
-            gap_rec.eigen=NP.zeros((n_pt*gap,m_conv)).tolist()
-            gap_rec.iters=NP.zeros((n_pt*gap,2)).tolist()
-            gap_lib[var_name]=gap_rec
+                  " will be computed with a_fft new grid size n=",n,".")
+            
+            gap_rec_it,gap_rec_fq=[[0]*2]*(n_pt*gap),[[0]*M_CONV]*(n_pt*gap)
+            gap_lib[var_name_it],gap_lib[var_name_fq]=gap_rec_it,gap_rec_fq
             
             with open(bandgap_name,'w') as file:
                 json.dump(gap_lib,file,indent=4)
     
-    X0=rand(3*n,m_conv+max(10,m_conv))
-    options_lobpcg={"pack_name":pack_name,\
-                    "iter_max":1000,\
-                    "tol":tol/scal/scal}
+    
+    """
+    Calculation of bandgap.
+    """
+    
+    x0=cp.random.rand(3*nn,M_CONV+max(10,M_CONV))+\
+        1j*cp.random.rand(3*nn,M_CONV+max(10,M_CONV))
+    
+    # Main Loop: compute each lattice point.    
         
     for i in range(len(indices)):
         t_h=time()
-        alpha=alphas[indices[i]]
-        relax_opt,pnt=mfd.set_relaxation(N,alpha)
-        options_lobpcg["shift"]=relax_opt[0]
-        m=m_conv+round(m_conv*relax_opt[1])
+        alpha=alphas[indices[i]]/(2*pi)
+       
+        relax_opt,pnt=mfd.set_relaxation(n,alpha)
+        m=M_CONV+round(M_CONV*relax_opt[1])
         
-        A=D+1j*alpha*Di/(2*pi)
-        B=(np.hstack(((A[0:n]*A[0:n].conj()).real,\
-                      (A[n:2*n]*A[n:2*n].conj()).real,\
-                      (A[2*n:]*A[2*n:].conj()).real)),\
-           np.hstack((A[0:n].conj()*A[n:2*n],A[0:n].conj()*A[2*n:],A[n:2*n].conj()*A[2*n:])))
-        INV=mfd.inverse_3_times_3_B(B,pnt)
+        a_fft=np.hstack((d_fft[:nn]+1j*alpha[0]*di_fft[:nn],\
+                         d_fft[nn:2*nn]+1j*alpha[1]*di_fft[nn:2*nn],\
+                         d_fft[2*nn:]+1j*alpha[2]*di_fft[2*nn:] ))
+        b_fft=(np.hstack(((a_fft[0:nn]*a_fft[0:nn].conj()).real,\
+                          (a_fft[nn:2*nn]*a_fft[nn:2*nn].conj()).real,\
+                          (a_fft[2*nn:]*a_fft[2*nn:].conj()).real)),\
+           np.hstack((a_fft[0:nn].conj()*a_fft[nn:2*nn],\
+                      a_fft[0:nn].conj()*a_fft[2*nn:],a_fft[nn:2*nn].conj()*a_fft[2*nn:])))
+        inv_fft=mfd.inverse_3_times_3_B(b_fft,pnt,relax_opt[0])
         
-        A/=scal
-        B=(pnt*B[0]/scal/scal,pnt*B[1]/scal/scal)
-        INV=(INV[0]*scal*scal,INV[1]*scal*scal)
+        a_fft/=SCAL
+        b_fft=(pnt*b_fft[0]/SCAL/SCAL,pnt*b_fft[1]/SCAL/SCAL)
+        inv_fft=(inv_fft[0]*SCAL*SCAL,inv_fft[1]*SCAL*SCAL)
+        
+        a_fft,b_fft,inv_fft=cp.asarray(a_fft),cp.asarray(b_fft),cp.asarray(inv_fft)
         t_o=time()
         print("Matrix blocks done, ",'%6.3f'%(t_o-t_h),"s elapsed.")
         
-        lambda_pnt,lambda_re,iters,X=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,B,(M_ind,1/eps),INV,X0[:,:m],m_conv,options_lobpcg)        
+        lambda_pnt,lambda_re,iters,x0=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0[:,:m],M_CONV,shift=relax_opt[0],tol=TOL/SCAL/SCAL)        
         
-        print("Gap index ",indices[i]," out of ",n_pt*gap," (",d_flag_name,") is computed.")
+        print("Gap index ",indices[i]+1," out of ",n_pt*gap," (",d_flag_name,") is computed.")
         print("Iterations=",iters[0],", runtime=",'%6.3f'%iters[1],"s.\n")
-        lamdba_pnt,lambda_re=print_and_normalize(lambda_pnt,lambda_re)
-        
-        gap_rec.eigen[indices[i],:]=lambda_re.tolist()
-        gap_rec.iters[indices[i],:]=iters.tolist()
+        __,lambda_re=print_and_normalize(lambda_pnt,lambda_re)    
+
+        gap_rec_it[indices[i]]=iters.tolist()
+        gap_rec_fq[indices[i]]=lambda_re.tolist()                
         
         t_h=time()
-        gap_lib[var_name]=gap_rec
+        gap_lib[var_name_it],gap_lib[var_name_fq]=gap_rec_it,gap_rec_fq
         
         with open(bandgap_name,'w') as file:
             json.dump(gap_lib,file,indent=4)
-        t_o=time()
-        print("Gap info library (",d_flag_name,") is updated, file optime=",\
+            
+        t_o=owari_cuda()
+        print("Gap info library (",d_flag_name,") is updated, time=",\
               '%6.3f'%(t_o-t_h),"s.")
     return
         
@@ -250,140 +252,188 @@ Part II: Control experiment.
 
 """
  
-# Control experiment. 
-# Factor: tolerance (tol), scaling coefficient (scal), grid size (N),
+# Control experiment.
+# Factor: tolerance (tol), SCALing coefficient (SCAL), grid size (n),
 #         linear algebra package (pack), dielectric coefficient (eps).
 #         penalty number (pnt), relaxation test (rela)
     
-def tol_cmp(N,d_flag_name,tols,alpha=np.array([pi,pi,pi])):
+def tol_cmp(n,d_flag_name,tols,alpha=np.array([pi,pi,pi])):
 
-    A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(N,d_flag_name,alpha)
+    a_fft,b_fft,diels,inv_fft,x0,shift=uniform_initialization(n,d_flag_name,alpha)
 
     n_tols=len(tols)
-    lambda_pnt=NP.zeros((n_tols,m_conv))
-    lambda_re=NP.zeros((n_tols,m_conv))
-    iters=NP.zeros((n_tols,2))
+    lambda_pnt=np.zeros((n_tols,M_CONV))
+    lambda_re=np.zeros((n_tols,M_CONV))
+    iters=np.zeros((n_tols,2))
     
     for i in range(n_tols):
-        options_lobpcg["tol"]=tols[i]/scal/scal
-        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,B,Ms,INV,X0,m_conv,options_lobpcg)
+        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0,M_CONV,tol=tols[i]/SCAL/SCAL,shift=shift)
             
         print("\ntol=",'%.2e'%tols[i]," is done computing.\n")
         lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])        
         
-    std_pnt=NP.std(lambda_pnt,axis=0)
-    std_re=NP.std(lambda_re,axis=0)
+    std_pnt=np.std(lambda_pnt,axis=0)
+    std_re=np.std(lambda_re,axis=0)
     print("Tolerance:")
     for i in range(n_tols):
         print("tol=",'%5.2e'%tols[i],", iterations=",iters[i,0],", time=",\
               '%5.2f'%iters[i,1],"s.")
     
     print("\nStandard deviation of each eigenvalue:")
-    for i in range(m_conv):
+    for i in range(M_CONV):
         print("i=",'%4d'%(i+1),"std_pnt=",'%7.3e'%std_pnt[i],",std_re=",'%7.3e'%std_re[i])
      
     return
 
-def pnt_cmp(N,d_flag_name,pnts,alpha=np.array([pi,pi,pi])):
-    # Increase default penalty by ratio N^pnts[i].
+def pnt_cmp(n,d_flag_name,pnts,alpha=np.array([pi,pi,pi])):
+    # Increase default penalty by ratio n^pnts[i].
     
-    A,B,Ms,__,X0,options_lobpcg=uniform_initialization(N,d_flag_name,alpha)
-    __,pnt0=mfd.set_relaxation(N,alpha)
-    B=(B[0]/pnt0,B[1]/pnt0)
+    a_fft,b_fft,diels,__,x0,shift=uniform_initialization(n,d_flag_name,alpha)
+    __,pnt0=mfd.set_relaxation(n,alpha)
+    b_fft=(b_fft[0]/pnt0,b_fft[1]/pnt0)
 
     n_pnts=len(pnts)
-    lambda_pnt=NP.zeros((n_pnts,m_conv))
-    lambda_re=NP.zeros((n_pnts,m_conv))
-    iters=NP.zeros((n_pnts,2))
+    lambda_pnt=np.zeros((n_pnts,M_CONV))
+    lambda_re=np.zeros((n_pnts,M_CONV))
+    iters=np.zeros((n_pnts,2))
     
     for i in range(n_pnts):
-        pnt=2*N**(pnts[i]+1.0)
-        INV=mfd.inverse_3_times_3_B(B,pnt)
+        pnt=2*n**(pnts[i]+1.0)
+        inv_fft=mfd.inverse_3_times_3_B(b_fft,pnt,shift)
 
-        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,(B[0]*pnt,B[1]*pnt),Ms,INV,X0,m_conv,options_lobpcg)
+        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=PCs_mfd_lobpcg\
+            (a_fft,(b_fft[0]*pnt,b_fft[1]*pnt),diels,inv_fft,x0,M_CONV,shift=shift)
         
-        print("\npnt=N^",'%.2f'%pnts[i]," is done computing.\n")
+        print("\npnt=n^",'%.2f'%pnts[i]," is done computing.\n")
         lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])
         
-    std_pnt=NP.std(lambda_pnt,axis=0)
-    std_re=NP.std(lambda_re,axis=0)
+    std_pnt=np.std(lambda_pnt,axis=0)
+    std_re=np.std(lambda_re,axis=0)
     print("Penalties:")
     for i in range(n_pnts):
         print("pnt=",'%5.2e'%pnts[i],", iterations=",iters[i,0],", time=",\
               '%5.2f'%iters[i,1],"s.")
     
     print("\nStandard deviation of each eigenvalue:")
-    for i in range(m_conv):
+    for i in range(M_CONV):
         print("i=",'%4d'%(i+1),"std_pnt=",'%7.3e'%std_pnt[i],",std_re=",'%7.3e'%std_re[i])
     return
 
 # Pairs: tol & rela.
-def rela_cmp(N,d_flag_name,relas,alpha=np.array([pi,pi,pi])):
+def rela_cmp(n,d_flag_name,relas,alpha=np.array([pi,pi,pi])):
     
-    A,B,Ms,INV,__,options_lobpcg=uniform_initialization(N,d_flag_name,alpha)
+    a_fft,b_fft,diels,inv_fft,__=uniform_initialization(n,d_flag_name,alpha)
     
-    n=N**3
+    nn=n**3
     tols=relas[0]
     rels=relas[1]
     n_relas=len(tols)
-    lambda_pnt=NP.zeros((n_relas,m_conv))
-    lambda_re=NP.zeros((n_relas,m_conv))
-    iters=NP.zeros((n_relas,2))
+    lambda_pnt=np.zeros((n_relas,M_CONV))
+    lambda_re=np.zeros((n_relas,M_CONV))
+    iters=np.zeros((n_relas,2))
     
     if n_relas!=len(rels):
         ValueError("Tuple relas should contain two arrays with same length.")
     
     for i in range(n_relas):
-        options_lobpcg["tol"]=tols[i]
-        m=m_conv+round(m_conv*rels[i])
-        X0=rand(3*n,m)
-        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,B,Ms,INV,X0,m_conv,options_lobpcg)
+        m=M_CONV+round(M_CONV*rels[i])
+        x0=rand(3*nn,m)
+        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0,M_CONV,tol=tols[i])
         lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])
             
     return
 
-def scal_cmp(N,d_flag_name,scals,alpha=np.array([pi,pi,pi])):
+def scal_cmp(n,d_flag_name,scals,alpha=np.array([pi,pi,pi])):
 
-    A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(N,d_flag_name,alpha)
+    a_fft,b_fft,diels,inv_fft,x0,options_lobpcg=uniform_initialization(n,d_flag_name,alpha)
 
     n_scals=len(scals)
-    lambda_pnt=NP.zeros((n_scals,m_conv))
-    lambda_re=NP.zeros((n_scals,m_conv))
-    iters=NP.zeros((n_scals,2))
+    lambda_pnt=np.zeros((n_scals,M_CONV))
+    lambda_re=np.zeros((n_scals,M_CONV))
+    iters=np.zeros((n_scals,2))
     
     for i in range(n_scals):
-        scal0=(N**scals[i])**2
-        options_lobpcg["tol"]/=scal0
+        scal0=(n**scals[i])**2
 
-        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A/np.sqrt(scal0),(B[0]/scal0,B[1]/scal0),Ms,(INV[0]*scal0,INV[1]*scal0),\
-             X0,m_conv,options_lobpcg)
+        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=PCs_mfd_lobpcg\
+            (a_fft/np.sqrt(scal0),(b_fft[0]/scal0,b_fft[1]/scal0),diels,(inv_fft[0]*scal0,inv_fft[1]*scal0),\
+             x0,M_CONV,tol=TOL/scal0)
 
-        print("\nscal=N^",'%.2f'%scals[i]," is done computing.\n")
-        lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])
+        print("\nscal=n^",'%.2f'%scals[i]," is done computing.\n")
+        lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:],np.sqrt(scal0))
      
-    std_pnt=NP.std(lambda_pnt,axis=0)
-    std_re=NP.std(lambda_re,axis=0)
+    std_pnt=np.std(lambda_pnt,axis=0)
+    std_re=np.std(lambda_re,axis=0)
     print("Scaling power:")
     for i in range(n_scals):
-        print("Scal=",'%5.2f'%scals[i],", iterations=",iters[i,0],", time=",\
+        print("SCAL=",'%5.2f'%scals[i],", iterations=",int(iters[i,0]),", time=",\
               '%5.2f'%iters[i,1],"s.")
     
     print("\nStandard deviation of each eigenvalue:")
-    for i in range(m_conv):
+    for i in range(M_CONV):
         print("i=",'%4d'%(i+1),"std_pnt=",'%7.3e'%std_pnt[i],",std_re=",'%7.3e'%std_re[i])
     
     return
 
-def pack_cmp(Ns,d_flag_name,packs,alpha=np.array([pi,pi,pi])):
+def eps_cmp(n,d_flag_name,epss,alpha=np.array([pi,pi,pi])):
+
+    a_fft,b_fft,diels,inv_fft,x0,shift=uniform_initialization(n,d_flag_name,alpha)
+    
+    n_epss=len(epss)
+    lambda_pnt=np.zeros((n_epss,M_CONV))
+    lambda_re=np.zeros((n_epss,M_CONV))
+    iters=np.zeros((n_epss,2))
+    
+    for i in range(n_epss):
+        diels=(diels[0],1/epss[i])
+        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0,M_CONV,shift=shift)
+        
+        print("\neps=",'%.2f'%epss[i]," is done computing.\n")
+        lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])
+    return
+    
+def grid_cmp(Ns,d_flag_name,alpha=np.array([pi,pi,pi])):
+    
+    Ns.sort()
+
+    n_Ns=len(Ns)
+    lambda_pnt=np.zeros((n_Ns,M_CONV))
+    lambda_re=np.zeros((n_Ns,M_CONV))
+    iters=np.zeros((n_Ns,2))
+    
+    for i in range(n_Ns):
+        a_fft,b_fft,diels,inv_fft,x0,shift=uniform_initialization(Ns[i],d_flag_name,alpha)
+        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0,M_CONV,shift=shift)
+
+        print("\nGrid size=",Ns[i]," is done computing.\n")
+        lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])
+
+    print("Grid size:")
+    for i in range(n_Ns):
+        print("n=",Ns[i],", iterations=",int(iters[i,0]),", time=",\
+              '%5.2f'%iters[i,1],"s.")
+    
+    print("\nDeviation (relative error):")
+    
+    for i in range(M_CONV):
+        print("i=",i+1,end=":\t")
+        for j in range(1,n_Ns):
+            print('%7.3e'%abs(lambda_pnt[j,i]-lambda_pnt[j-1,i]),end=" ")
+        print()
+        
+    return
+
+# Cuda speed up test.
+def speedup(Ns,d_flag_name,alpha=np.array([pi,pi,pi])):
     
     # Packs={gpu_pack, cpu_pack}. 
     # cpu: numpy,scipy. gpu: cupy,cupyx.
     
-    runtime_name="runtime_"+packs[0]+'_'+packs[1]    
+    runtime_name="output/speedup_"+d_flag_name+".json"
     
     if not os.path.exists(runtime_name):
         runtime_pack_lib={}
@@ -392,76 +442,60 @@ def pack_cmp(Ns,d_flag_name,packs,alpha=np.array([pi,pi,pi])):
             runtime_pack_lib=json.load(file)
 
     n_Ns=len(Ns)
-    iters=NP.zeros((n_Ns,2,2))
+    iters=np.zeros((n_Ns,2,2))
     
     for i in range(n_Ns):
-        A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(Ns[i],d_flag_name,alpha)
-        
-        options_lobpcg["pack_name"]=packs[0]
-        lambda_pnt,lambda_re,iters[i,0,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,B,Ms,INV,X0,m_conv,options_lobpcg)
-        print("\nN=,",Ns[i],", Package=",packs[0]," is done computing.\n")
+        a_fft,b_fft,diels,inv_fft,x0,shift=uniform_initialization(Ns[i],d_flag_name,alpha)
+
+        lambda_pnt,lambda_re,iters[i,0,:],__=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0,M_CONV,shift=shift)
+        print("\nN=",Ns[i],", gpu (cupy/cupyx.scipy) is done computing, runtime=",\
+              '%6.3f'%iters[i,0,1],"s.\n")
         __,__=print_and_normalize(lambda_pnt,lambda_re)
         
-        options_lobpcg["pack_name"]=packs[1]
-        lambda_pnt,lambda_re,iters[i,1,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,B,Ms,INV,X0,m_conv,options_lobpcg)
-        print("\nN=,",Ns[i],", Package=",packs[1]," is done computing.\n")
+        a_fft,b_fft,inv_fft,x0=a_fft.get(),b_fft.get(),inv_fft.get(),x0.get()
+        lambda_pnt,lambda_re,iters[i,1,:],__=PCs_mfd_lobpcg\
+            (a_fft,b_fft,diels,inv_fft,x0,M_CONV,shift=shift)
+        print("\nN=",Ns[i],", cpu (numpy/scipy) is done computing, runtime=",\
+              '%6.3f'%iters[i,1,1],"s.\n")
         __,__=print_and_normalize(lambda_pnt,lambda_re)
         
         runtime_pack_lib["pack_cmp_"+str(Ns[i])]=\
-            runtime_info(iters[i,0,0],iters[i,1,1],iters[i,0,1])
+            [iters[i,0,0],iters[i,1,1],iters[i,0,1],iters[i,1,1]/iters[i,0,1]]
             
         with open(runtime_name,'w') as file:
             json.dump(runtime_pack_lib,file,indent=4)
 
+    print("\nTesting lattice type: ",d_flag_name)
     print("Runtime comparison using different linear algebra packages:")
     for i in range(n_Ns):
-        print("N=,",Ns[i],", iterations=",iters[i,0,0],", cputime=",\
+        print("n=",Ns[i],", iterations=",iters[i,0,0],", cputime=",\
               '%5.2f'%iters[i,1,1],"s, gputime=",'%5.2f'%iters[i,0,1],\
               "s, ratio=",'%5.2f'%(iters[i,1,1]/iters[i,0,1]),".")
       
     return
 
-def eps_cmp():
-    
-    return
-    
-def grid_cmp(Ns,d_flag_name,alpha=np.array([pi,pi,pi])):
-    
-    Ns.sort()
 
-    n_Ns=len(Ns)
-    lambda_pnt=NP.zeros((n_Ns,m_conv))
-    lambda_re=NP.zeros((n_Ns,m_conv))
-    iters=NP.zeros((n_Ns,2))
-    
-    for i in range(n_Ns):
-        A,B,Ms,INV,X0,options_lobpcg=uniform_initialization(Ns[i],d_flag_name,alpha)
-        lambda_pnt[i,:],lambda_re[i,:],iters[i,:],__=eigen_lobpcg.PCs_mfd_lobpcg\
-            (A,B,Ms,INV,X0,m_conv,options_lobpcg)
+# Test and debug.
 
-        print("\nGrid size=",Ns[i]," is done computing.\n")
-        lambda_pnt[i,:],lambda_re[i,:]=print_and_normalize(lambda_pnt[i,:],lambda_re[i,:])
+def main():
+    
+    eigen_1p(100,"sc_curv",np.array([pi,0,0]))
+    #eigen_1p(150,"sc_curv",np.array([2*pi,0,0])/20)
+    #tol_cmp(100,"sc_curv",[5e-4,1e-4,1e-5,1e-6])
+    #pnt_cmp(100,"sc_curv",[0,1.2,1.5,2])        
+    #scal_cmp(100,"sc_curv",[0,0.2,0.5,0.8,1])
+    #grid_cmp([100,120,150],"sc_curv")
 
-    print("Grid size:")
-    for i in range(n_Ns):
-        print("N=",Ns[i],", iterations=",iters[i,0],", time=",\
-              '%5.2f'%iters[i,1],"s.")
+    #speedup([100,120,150],"sc_curv")
+
+    #bandgap(100,'bcc_single_gyroid',20)
+
+    #bandgap(100,'sc_curv',20,[0])
+    #bandgap(100,'fcc',20)
+    #bandgap(120,'fcc',20)
+    #bandgap(150,'fcc',20)
     
-    print("\nDeviation (relative error):")
-    
-    for i in range(m_conv):
-        print("i=",i+1,end=":\t")
-        for j in range(1,n_Ns):
-            print('%7.3e'%abs(lambda_pnt[j,i]-lambda_pnt[j-1,i]),end=' ')
-        print()
-        
-    return
-#eigen_1p(100,"sc_curv",np.array([pi,pi,pi]))
-#tol_cmp(100,"sc_curv",[5e-4,1e-4,1e-5,1e-6])
-#pnt_cmp(100,"sc_curv",[0,1.2,1.5,2])        
-#(100,"sc_curv",[0,0.2,0.5,0.6,0.8,1])
-grid_cmp([80,100,120],"sc_curv")
-     
+if __name__=="__main__":
+    main()
     
