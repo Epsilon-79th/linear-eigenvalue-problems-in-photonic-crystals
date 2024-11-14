@@ -42,9 +42,7 @@ discretization.py: Implements spatial discretization for the problem domain.
 
 eigen_solver.py: Implements the eigenvalue solver using the lobpcg method.
 
-gpu_opts.py: Optimizations for GPU usage (if available).
-
-my_norm.py: Custom normalization functions.
+gpu_opts.py: Norms (package), timing (gpu timing requires synchronization).
 
 output.py: Manages output data and results visualization.
 
