@@ -48,4 +48,7 @@ output.py: Manages output data and results visualization.
 
 run.py: Main script to execute the Python-based simulations.
 
+## How to implement functions
+### Matlab
 
+### Python
