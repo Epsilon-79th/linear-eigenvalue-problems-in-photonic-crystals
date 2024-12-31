@@ -107,6 +107,40 @@ run.py: Main script to execute the Python-based simulations.
 
 ## Experiments
 ### Benchmark
+<dev align = "center">
+  <figure>
+    <img src = "pic/model1.png" width = "800">
+    <figcaption> Figure 1: Geometric structure of a single lattice and its band gap. $\varepsilon_1/\varepsilon_0=13.$ Grid size $N=100.$ The ratio of the band gap is 0.075406. </figcaption>
+  </figure>
+</dev>
+
+<dev align = "center">
+  <figure>
+    <img src = "pic/model2.png" width = "800">
+    <figcaption> Figure 2: Geometric structure of a single lattice and its band gap. $\varepsilon_1/\varepsilon_0=13.$ Grid size $N=100.$ The ratio of the band gap is 0.21013.</figcaption>
+  </figure>
+</dev>
+
+<dev align = "center">
+  <figure>
+    <img src = "pic/model_sc.png" width = "800">
+    <figcaption> Figure 3: Geometric structure of a single lattice with a curved interface and its band gap. Radii of the center sphere and cylinders are $0.345l$ and $0.11l$. $\varepsilon_1/\varepsilon_0=13.$ Grid size $N=150.$ The ratio of the band gap is 0.14019.</figcaption>
+  </figure>
+</dev>
+
+<dev align = "center">
+  <figure>
+    <img src = "pic/model_bcc.png" width = "800">
+    <figcaption> Figure 4: Geometric structure of the BCC lattice with a curved interface and its band gap, $\varepsilon_1/\varepsilon_0=16.$ Grid size $N=150.$ The ratio of the band gap is 0.31745.</figcaption>
+  </figure>
+</dev>
+
+<dev align = "center">
+  <figure>
+    <img src = "pic/model_fcc.png" width = "800">
+    <figcaption> Figure 5: Geometric structure of the FCC lattice with a curved interface and its band gap, $\varepsilon_1/\varepsilon_0=13.$ Grid size $N=150.$ The ratio of the band gap is 0.31182.</figcaption>
+  </figure>
+</dev>
 
 ### Parallel speedup on V100
 | DoFs            | Steps | GPU time  | CPU time  | Speedup      | Steps | GPU time  | CPU time  | Speedup      |
