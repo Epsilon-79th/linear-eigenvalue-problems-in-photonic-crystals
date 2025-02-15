@@ -1,7 +1,31 @@
 # linear-eigenvalue-problems-in-photonic-crystals
-A kernel compensation method and eigendecomposition of double curl operator.
+![Language Badges](https://img.shields.io/badge/MATLAB-R2023a%2B-blue) 
+![Python Version](https://img.shields.io/badge/Python-3.8%2B-green)
+[![DOI](https://img.shields.io/badge/DOI-10.1002%2Fnum.23171-007ec6)](https://doi.org/10.1002/num.23171)
 
-This repository provides **MATLAB** and **Python** implementations for computing frequencies, bandgaps of photonic crystals. The project applies locally optimal block preconditioned conjugate gradient (**lobpcg**) methods to solve problems in photonic crystals (PCs) and includes several modules to handle dielectric properties, discretization, and eigenvalue solving.
+## Introduction
+**Advanced computational framework for photonic bandgap analysis**  
+This repository implements a novel kernel compensation method and double curl operator eigendecomposition for accurate photonic crystal characterization. The package provides cross-platform solutions in both MATLAB and Python for:
+
+- Frequency spectrum computation
+- Bandgap detection
+- Maxwell eigenproblem solving
+
+### Key Features
+✅ **LOBPCG Eigensolver**  
+Implements Locally Optimal Block Preconditioned Conjugate Gradient (LOBPCG) method with adaptive preconditioning for accelerated convergence
+
+✅ **Multi-physics Modules**  
+- Dielectric tensor manipulation toolkit  
+- Mimetic finite difference discretization  
+- Curl-conforming eigenvalue solver  
+- Band structure visualization
+
+### Theoretical Foundation
+The core methodology is detailed in our peer-reviewed publication:  
+**"Kernel Compensation Method for Maxwell Eigenproblem in Photonic Crystals With Mimetic Finite Difference"**  
+_Numer. Methods Partial Differential Eq._ 2024.  
+[![DOI](https://img.shields.io/badge/Full_Paper-10.1002/num.23171-important)](https://doi.org/10.1002/num.23171)
 
 ## Mathematical procedure of setup
 ### Model problem
