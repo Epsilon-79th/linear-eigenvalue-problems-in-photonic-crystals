@@ -130,6 +130,19 @@ output.py: Manages output data and results visualization.
 run.py: Main script to execute the Python-based simulations.
 
 ## Experiments
+### Lattices
+The symmetry points of the Brillouin zone of SC, FCC, and BCC lattices are:
+
+$$
+\begin{align}
+\begin{aligned}
+      &\text{SC:\ \ }\Gamma(0,0,0),\ L(\frac{\pi}{l},0,0),\ M(\frac{\pi}{l},\frac{\pi}{l},0),\ N(\frac{\pi}{l},\frac{\pi}{l},\frac{\pi}{l}),\\
+      &\text{FCC:\ }X(0,\frac{2\pi}{l},0),\ U(\frac{\pi}{2l},0,\frac{\pi}{2l}),\ L(\frac{\pi}{l},\frac{\pi}{l},\frac{\pi}{l}),\ \Gamma(0,0,0),\ W(\frac{\pi}{l},\frac{2\pi}{l},0),\ K(\frac{3\pi}{2l},\frac{3\pi}{2l},0),\\
+      &\text{BCC:\ }H'(0,0,\frac{2\pi}{l}),\ \Gamma(0,0,0),\ P(\frac{\pi}{l},\frac{\pi}{l},\frac{\pi}{l}),\ N(\frac{\pi}{l},0,\frac{\pi}{l}),\ H(0,\frac{2\pi}{l},0).
+\end{aligned}
+\end{align}
+$$
+
 ### Benchmark
 Three SC examples, a BCC example and a FCC example are provided.
 
