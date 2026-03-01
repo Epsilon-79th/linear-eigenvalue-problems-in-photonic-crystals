@@ -465,6 +465,7 @@ def bandgap(n, d_flag, solver = lobpcg_sep_softlock, type = TYPE0, eps_opt = 0, 
             gap_rec_fq[indices[i]] = lambdas_re.tolist()  
         
         except Exception:
+            # If nan/blowup occurs, set error record (-1) and print warning.
             err_index.append(indices[i])
             lambdas_re = -1.0 * np.ones(NEV)
             x = cp.random.rand(3 * nn, m) + 1j * cp.random.rand(3 * nn, m)
@@ -492,44 +493,21 @@ def bandgap(n, d_flag, solver = lobpcg_sep_softlock, type = TYPE0, eps_opt = 0, 
     
     return err_index
 
-def test():
-
-    indices = list(range(120))
-    for i in range(5):
-        indices = bandgap(120, FCC, type=TYPE1, indices = indices, solver = lobpcg_sep_softlock)
-        if len(indices) == 0:
-            print(f"{GREEN}Full bandgap computation is completed after {i} recomputings.")
-            break
-
-    return
-
 def main():
-    #  Order: CUDA_VISIBLE_DEVICES=4 python numerical_experiments.py
+    #  Order: CUDA_VISIBLE_DEVICES= _ python numerical_experiments.py
 
-    #bandgap_wnk_check(120,d_flag=BCC_DG,ind=[139])
-    
-    eigen_1p(120, SC_C, np.array([pi,0,0]), nev=10, type = TYPE1, solver=lobpcg_sep_softlock)
+    eigen_1p(120, BCC_DG, np.array([pi,0,0]), nev=10, type = TYPE1, solver=lobpcg_sep_softlock)
     #bandgap(120, d_flag=SC_C, type=TYPE2)
-    #bandgap(120, d_flag=FCC, type=TYPE2, indices=[60])
-    #bandgap(120, d_flag=BCC_SG, type=TYPE2, indices=[20, 98, 100])
-    #bandgap(120, d_flag=BCC_DG, type=TYPE0, indices=[39])
-
-    #nev = 15
-    #alpha_sample = np.array([0.01,0,0])*pi
-    #eigen_1p(120, d_flag=SC_C, alpha=alpha_sample, type=TYPE2, nev=nev)
-    #eigen_1p(120, d_flag=BCC_SG, alpha=alpha_sample, type=TYPE2, nev=nev)
-    #eigen_1p(120, d_flag=BCC_DG, alpha=alpha_sample, type=TYPE2, nev=nev)
-    #eigen_1p(120, d_flag=BCC_DG, alpha=alpha_sample, type=TYPE0, nev=nev)
-    #eigen_1p(100, d_flag=BCC_DG, alpha=alpha_sample, type=TYPE0, nev=nev)
+    #bandgap(120, d_flag=FCC, type=TYPE2)
+    #bandgap(120, d_flag=BCC_SG, type=TYPE2)
+    #bandgap(120, d_flag=BCC_DG, type=TYPE0)
 
     #bandgap_history_check(120, d_flag=SC_C, type=TYPE2)
     #bandgap_history_check(120, d_flag=FCC, type=TYPE2)
     #bandgap_history_check(120, d_flag=BCC_SG, type=TYPE2)
     #bandgap_history_check(120, d_flag=BCC_SG, type=TYPE2)
 
-    #_ = mfd.pseudochiral_crossdof_handle(120, eps_opt=1)
     return
-    
     
 if __name__ == '__main__':
     main()

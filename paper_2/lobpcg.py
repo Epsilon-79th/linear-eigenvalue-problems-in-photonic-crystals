@@ -386,7 +386,6 @@ def lobpcg_sep_softlock(
     
     # Total runtime of iterations.
     t_tot_h = time.time()
-    blowup = False
     for iter_ in range(maxiter):
         t_iter_h = time.time()
         

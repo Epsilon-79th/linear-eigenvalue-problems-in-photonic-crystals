@@ -23,7 +23,7 @@ DIEL_PATH = "dielectric_examples/"
 K = 1                         # Stencil length.
 NEV = 10                      # Number of desired eigenpairs.
 SCAL = 1                      # Lattice scaling constant.
-TOL = 4*pi*pi*1e-5            # Tolerance.
+TOL = 1e-5                    # Tolerance.
 GAP = 20                      # Segmentation of the Brillouin zone.
 
 # Chiral constants (positive real).
@@ -109,53 +109,6 @@ def timing(process_name=None, time_array=None, index=None, runtime_dict=None, pr
     if print_time and process_name is not None:
         print(f"Runtime of {process_name} is {elapsed:<6.3f} s.")
     
-
-def general_wrapper():
-    
-    def decorator(my_func):
-        @wraps(my_func)
-        def wrapper(*args, **kwargs):
-            t_h = time.time()
-            output = my_func()
-            t_o = owari_cuda()
-            
-            print(f"Function {my_func.__name__} takes {t_o-t_h:<6.3f} s to ellapse.")
-
-def solver_wrapper():
-    
-    """    
-    Wrapping the linear solver function, output convergence info.
-    Warning if maximum iterations reached.
-
-    Parameters:
-        iter_max (int): Maxmimum iterations allowed.
-        
-    """
-    def decorator(solver_func):
-        @wraps(solver_func)
-        def wrapper(*args, **kwargs):
-            
-            iter_max=kwargs.get('iter_max',1000)
-            t_h = time.time()
-            
-            # Solver.
-            solution, it = solver_func(*args, **kwargs)
-            t_o = time.time()
-            runtime = t_o - t_h       
-            
-            solver_name=solver_func.__name__     
-            print(f"Solver {solver_name} takes {it} iterations with runtime {runtime:<6.3f} s.")
-            
-            # Output warning if maximum iteration is reached.
-            if it + 2 >= iter_max:
-                print(f"{RED}Warning: {solver_name} reaches maxmimum iterations, solution might be inaccurate.{RESET}")
-            else:
-                print(f"{GREEN}Convergence of {solver_name} is reached.{RESET}")
-            
-            return solution, [it, runtime]
-        return wrapper
-    return decorator
-
 """
 Norms.
 """
