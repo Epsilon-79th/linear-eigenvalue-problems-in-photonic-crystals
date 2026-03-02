@@ -38,147 +38,59 @@ The structure of the repository is outlined as follows:
 └── README.md
 ```
 
-## 
-
 ## Mathematical Theory
 
 Computational framework for photonic bandgap analysis using finite difference (Yee's scheme) with kernel compensation. The mathematical model problem is given by:
+
 $$
-\begin{align}
-	\left\{\begin{aligned} 
-&\nabla \times (\varepsilon^{-1} \nabla \times \boldsymbol{H}) = \omega^2 \boldsymbol{H},\quad&  \text{in } \mathbb{R}^3, \\ 
-&\nabla \cdot \boldsymbol{H} = 0, \quad& \text{in } \mathbb{R}^3,
-\end{aligned}\right.
-\end{align}
+	\begin{cases} 
+&\nabla \times (\varepsilon^{-1} \nabla \times \boldsymbol{H}) = \omega^2 \boldsymbol{H},\quad&  \text{in } \mathbb{R}^{3}, \\ 
+&\nabla \cdot \boldsymbol{H} = 0, \quad& \text{in } \mathbb{R}^{3},
+\end{cases}
 $$
-where $\boldsymbol{H}$ is the magnetic field, $\omega$ is the frequency and $\varepsilon=\varepsilon(\omega,\boldsymbol{x})$ is the dielectric function. In this project, $\varepsilon$ depends ONLY on the spatial position $\boldsymbol{x}$, resulting in linear eigenproblems. The case where $\varepsilon$ is frequency-dependent (which results in nonlinear eigenproblems) is considered and solved in the repository <https://github.com/Epsilon-79th/NHEP-nonlinear-Hermitian-eigenproblem-in-photonic-crystals>. We summarize the treatments towards the model problem as follows:
 
-- **Bloch theorem** The magnetic field $\boldsymbol{H}$ satisfies the quasi-periodic boundary condition $\boldsymbol{H}(\boldsymbol{x} + \boldsymbol{a}_i) = e^{i\mathbf{k} \cdot \boldsymbol{a}_i} \boldsymbol{H}(\boldsymbol{x})$, where $\{\boldsymbol{a}_i\}_{i=1}^3$ are lattice translation vectors that span the primitive cell $\Omega := \left\{ \boldsymbol{x} \in \mathbb{R}^3 : \boldsymbol{x} = \sum_{i=1}^{3} x_i \boldsymbol{a}_i, \, x_i \in [0, 1] \right\}$, $\mathbf{k}=(\mathrm{k}_1,\mathrm{k}_2,\mathrm{k}_3)\in\mathbb{R}^3$ is the wave number vector located in the first Brillouin zone.
+where $\boldsymbol{H}$ is the magnetic field, $\omega$ is the frequency and $\varepsilon=\varepsilon(\omega,\boldsymbol{x})$ is the dielectric function. In this project, $\varepsilon$ depends ONLY on the spatial position $\boldsymbol{x}$, resulting in linear eigenproblems. The case where $\varepsilon$ is frequency-dependent (which results in nonlinear eigenproblems) is considered and solved in the repository <https://github.com/Epsilon-79th/NHEP-nonlinear-Hermitian-eigenproblem-in-photonic-crystals>. The major contribution of Paper 2 lies in the novel discretization towards $\varepsilon^{-1}$. To be precise, the definition of $\varepsilon^{-1}$ is given by
 
-- **Shifted nabla operator**  By introducing the shifted nabla operator $\nabla_{\mathbf{k}}:=\nabla+\mathrm{i}\mathbf{k}I$ ($I$ is the identity), the model problem is equivalent to the following system involved with shifted differential operators:
-  $$
-  \begin{align}
-  \left\{
-  	\begin{aligned}
-  		&\nabla_{\mathbf{k}} \times (\varepsilon^{-1} \nabla_{\mathbf{k}} \times \boldsymbol{H}) = \omega^2 \boldsymbol{H},& \text{in } \Omega, \\ 
-  &\nabla_{\mathbf{k}} \cdot \boldsymbol{H} = 0, & \text{in } \Omega, \\ 
-  &\boldsymbol{H}(\boldsymbol{x} + \boldsymbol{a}_i) = \boldsymbol{H}(\boldsymbol{x}), & i = 1, 2, 3. 
-  	\end{aligned}
-  \right.
-  \end{align}
-  $$
+$$
+\varepsilon^{-1}(\boldsymbol{x}) = \begin{cases} 
+\varepsilon_1, & \boldsymbol{x} \in \Omega_1, \\ 
+I_3, & \boldsymbol{x} \in \Omega \setminus \Omega_1, 
+\end{cases}
+$$
 
-- **Coordinate change** We introduce the transform $\boldsymbol{x}\mapsto \boldsymbol{H}(\mathbf{A}\boldsymbol{x})$, where $\mathbf{A}=(\boldsymbol{a}_1,\boldsymbol{a}_2,\boldsymbol{a}_3)$, so that the periodicity is along standard orthonormal basis in $\mathbb{R}^3$.
+where $I_3$ is the $3\times 3$ identity matrix and $\varepsilon_ 1$ is a constant $3\times 3$ Hermitian positive definite (HPD) tensor. In Paper 1 we consider the case where $\varepsilon_ 1$ is a diagonal matrix, while in Paper 2 nonzero off-diagonal entries occur. The discretization should preserve the consistency of degrees of freedom (DoFs) as well as the HPD property, which means the discrete form of $\varepsilon^{-1}$, denoted by $M$, should also be HPD. In Paper 2 we introduce two approaches and prove $M$ derived from both approaches are HPD.  
 
-- **Definition of $\varepsilon$ ** The dielectric function is defined by
-  $$
-  \varepsilon^{-1}(\boldsymbol{x}) = \begin{cases} 
-  \varepsilon_1, & \boldsymbol{x} \in \Omega_1, \\ 
-  I_3, & \boldsymbol{x} \in \Omega \setminus \Omega_1, 
-  \end{cases}
-  $$
-  where $\Omega_1\subset\Omega$ is a subdomain of $\Omega$ representing the material area. $\varepsilon_1$ is a constant $3\times 3$ tensor function. In Paper 1, $\varepsilon_1$ is supposed to be a diagonal matrix (or scalar matrix), which corresponds with the `isotropic` media ; In Paper 2, off-diagonal entries of $\varepsilon_1$ occur, which corresponds with `anisotropic`, `pseudochiral` media.
+We also give a brief summary on how kernel compensation works in the double-curl problem. Under the framework of mimetic finite difference, the magnetic field is approximated by face DoFs $H_ h$. On the uniform grid where each axis is $N$-partitioned, the total DoFs equals $3N^ 3$, thus $H_ h\in C^ {3N^ 3}$. The discrete curl, divergence operator is stored by sparse matrix $A$, $B$ respectively. The double curl operator is treated by adjoint relation where the outer curl is approximated by $A$ while the inner curl approximated by its conjugate transpose $A^ \dagger$. The original discrete formulation (left) and the kernel compensation formulation (right) are shown below:
 
-- **Mimetic finite difference** The magnetic field $\boldsymbol{H}$ is approximated by $3N^3$ face degrees of freedom (DoFs) on an $N$-uniformly partitioned staggered grid, denoted by $\boldsymbol{H}_h$. The matrix representation of the discrete form is formulated as
-  $$
-  \begin{align}
-  \left\{
-  \begin{aligned}
-  	&(\mathcal{A}\mathcal{M}\mathcal{A}^\dagger)\boldsymbol{H}_h=\omega^2\boldsymbol{H}_h,\\
-  	&\mathcal{B}\boldsymbol{H}_h=\boldsymbol{0},
-  \end{aligned}
-  \right.
-  \end{align}
-  $$
-  where $\mathcal{A}$ stands for the discrete curl operator $\nabla_{\mathbf{k}}\times$ and $\mathcal{B}$ stands for the discrete divergence operator $\nabla_{\mathbf{k}}\cdot$ . The conjugate transpose $\mathcal{A}^\dagger$ is derived by the adjoint relation. $\mathcal{A}$ and $\mathcal{B}$ is expressed as
-  $$
-  \mathcal{A} = \begin{pmatrix}
-  \ & -\mathcal{D}_3 & \mathcal{D}_2 \\
-  \mathcal{D}_3 &\ & -\mathcal{D}_1 \\
-  -\mathcal{D}_2 & \mathcal{D}_1 & \
-  \end{pmatrix}, \quad \mathcal{B} = \begin{pmatrix} \mathcal{D}_1 & \mathcal{D}_2 & \mathcal{D}_3 \end{pmatrix},
-  $$
-  where $\mathcal{D}_i = \mathcal{D}_{1,i} + i k_i \mathcal{D}_{0,i}$  for  $i=1,2,3$ and $\mathcal{D}_{s,1} = I_{N^2} \otimes \mathbf{D}_s, \ \mathcal{D}_{s,2} = I_N \otimes \mathbf{D}_s \otimes I_N, \ \mathcal{D}_{s,3} = \mathbf{D}_s \otimes I_{N^2} $  for $s=0,1$, $\otimes$ is the Kronecker product. Construction of $\mathcal{M}$, the discrete form of $\varepsilon^{-1}$, will be mentioned afterwards.
+$$
+\begin{cases}
+	(AMA^\dagger)H_h = \omega^2 H_h, \\ 
+	BH_h=0.
+\end{cases} \qquad\Leftrightarrow \qquad (AMA^\dagger+\gamma B^\dagger B)H_h = \omega^2 H_h.
+$$
 
-- **Kernel compensation** Based on the consistent condition $\mathcal{B}\mathcal{A}=\boldsymbol{0}$, the kernel compensation technique is introduced to solve the several smallest positive eigenvalues and corresponding eigenvectors of $\mathcal{A}\mathcal{M}\mathcal{A}^\dagger$ such that the divergence-free condition $\mathcal{B}\boldsymbol{H}_h=\boldsymbol{0}$ is satisfied. It's formulated by
-  $$
-  \left(\mathcal{A}\mathcal{M}\mathcal{A}^\dagger+\gamma\mathcal{B}^\dagger\mathcal{B}\right)\boldsymbol{H}_h=\omega^2\boldsymbol{H}_h,
-  $$
-  where $\gamma$ is the penalty coefficient. We prove in Paper 2 that, when $\gamma$ is chosen 
-  $$
-  \gamma=\begin{cases}
-  4\pi^2,\quad & \|\mathbf{k}\|_2\geq 1\text{ or }\mathbf{k}=\boldsymbol{0},\\
-  4\pi^2\|\mathbf{k}\|_2^{-2}\quad& 0<\|\mathbf{k}\|_2<1,
-  \end{cases}
-  $$
-  the eigenpairs solved from kernel compensation are the desired ones. Moreover, the null space of the kernel compensation system, $\mathcal{H}:=\ker\left(\mathcal{A}\mathcal{M}\mathcal{A}^\dagger+\gamma\mathcal{B}^\dagger\mathcal{B}\right)=\ker\mathcal{A}^\dagger\cap\ker\mathcal{B}$, satisfies
-  $$
-  \mathcal{H}=\begin{cases}
-  \{\boldsymbol{0}\},\quad &\mathbf{k}\neq\boldsymbol{0},\\
-  \text{span}\{(\mathbf{1_{N^3},\boldsymbol{0},\boldsymbol{0}}), (\boldsymbol{0},\mathbf{1_{N^3},\boldsymbol{0}}), (\boldsymbol{0},\boldsymbol{0}, \mathbf{1}_{N^3})\},\quad&\mathbf{k}=\boldsymbol{0}.
-  \end{cases}
-  $$
-
-- **Matrix-free operations** We derive the FFT-diagonalized matrix blocks $\mathcal{K}_{\mathcal{A}}, \mathcal{K}_{\mathcal{B}}$ via 3D DFT matrices:
-  $$
-  \mathcal{F}_3:=\text{diag}(\mathcal{F},\mathcal{F},\mathcal{F}),\quad \mathcal{F}:=\mathbf{F}\otimes\mathbf{F}\otimes\mathbf{F},\quad \mathbf{F}:=(\frac{1}{\sqrt{N}}\exp(2\pi\mathrm{i}\frac{ij}{N}))_{0\leq i,j\leq N-1}.
-  $$
-  There holds
-  $$
-  \begin{align}
-  &\mathcal{A} = \mathcal{F}_3\mathcal{K}_{\mathcal{A}}\mathcal{F}_3^{\dagger}, \quad \mathcal{B}^{\dagger}\mathcal{B} = \mathcal{F}_3\mathcal{K}_{\mathcal{B}}\mathcal{F}_3^{\dagger}, \quad \text{where}\\
-  &\mathcal{K}_{\mathcal{A}} = \begin{pmatrix} & -\mathcal{K}_3 & \mathcal{K}_2 \\ \mathcal{K}_3 & & -\mathcal{K}_1 \\ -\mathcal{K}_2 & \mathcal{K}_1 & \end{pmatrix}, \quad \mathcal{K}_{\mathcal{B}} = \begin{pmatrix} \mathcal{K}_1^{\dagger} \\ \mathcal{K}_2^{\dagger} \\ \mathcal{K}_3^{\dagger} \end{pmatrix} \begin{pmatrix} \mathcal{K}_1 & \mathcal{K}_2 & \mathcal{K}_3 \end{pmatrix}.
-  \end{align}
-  $$
-  The blocks $\mathcal{K}_i$ are characterized as
-  $$
-  \mathcal{D}_i = \mathcal{F}\mathcal{K}_i\mathcal{F}^{\dagger}, \quad i=1,2,3, \quad \text{where} \quad \begin{cases} \mathcal{K}_1 = I_{N^2} \otimes (\Lambda_1 + \mathrm{i}\mathrm{k}_1\Lambda_0), \\ \mathcal{K}_2 = I_N \otimes (\Lambda_1 + \mathrm{i}\mathrm{k}_2\Lambda_0) \otimes I_N, \\ \mathcal{K}_3 = (\Lambda_1 + \mathrm{i}\mathrm{k}_3\Lambda_0) \otimes I_{N^2}. \end{cases}
-  $$
-  Thus $\mathcal{A}\mathcal{M}\mathcal{A}^{\dagger} + \gamma\mathcal{B}^{\dagger}\mathcal{B} = \mathcal{F}_3(\mathcal{K}_{\mathcal{A}}\mathcal{F}_3^{\dagger}\mathcal{M}\mathcal{F}_3\mathcal{K}_{\mathcal{A}}^{\dagger} + \gamma\mathcal{K}_{\mathcal{B}})\mathcal{F}_3^{\dagger}$, eliminating $\mathcal{F}_3$ on both sides:
-  $$
-  (\mathcal{K}_{\mathcal{A}}\mathcal{F}_3^{\dagger}\mathcal{M}_{\varepsilon}\mathcal{F}_3\mathcal{K}_{\mathcal{A}}^{\dagger} + \gamma\mathcal{K}_{\mathcal{B}})\boldsymbol{x} = \omega^2\boldsymbol{x}, \quad \boldsymbol{x} = \mathcal{F}_3^{\dagger}\boldsymbol{H}_h.
-  $$
-
-  To construct an effective preconditioner, we consider an approximation by neglecting the middle term $\mathcal{F}_3^{\dagger}\mathcal{M}\mathcal{F}_3$. This yields the following preconditioning matrix:
-  $$
-  \mathcal{K}_{\mathcal{P}} := \mathcal{K}_{\mathcal{A}}\mathcal{K}_{\mathcal{A}}^{\dagger} + \gamma\mathcal{K}_{\mathcal{B}}.
-  $$
-
-  Therefore a complete formulation of operations during each iteration is
-  $$
-  \begin{cases} \text{Original system:} & (\mathcal{K}_{\mathcal{A}}\mathcal{F}_3^{\dagger}\mathcal{M}_{\varepsilon}\mathcal{F}_3\mathcal{K}_{\mathcal{A}}^{\dagger} + \gamma\mathcal{K}_{\mathcal{B}})\boldsymbol{x} = \omega^2\boldsymbol{x}, \\ \text{Preconditioning:} & \boldsymbol{x} \mapsto \mathcal{K}_{\mathcal{P}}^{-1}\boldsymbol{x}, \quad \mathcal{K}_{\mathcal{P}} = \mathcal{K}_{\mathcal{A}}\mathcal{K}_{\mathcal{A}}^{\dagger} + \gamma\mathcal{K}_{\mathcal{B}}. \end{cases}
-  $$
-
-- **Discretization of $\varepsilon^{-1}$** This part is the major contribution of Paper 2 where we design two novel discretization approaches to $\varepsilon^{-1}$ and prove that the resulting matrices $\mathcal{M}$ of both approaches are Hermitian positive definite (HPD). Discrete dielectric matrices $\mathcal{M}$ derived from two methods are denoted by $\mathcal{M}_{\text{trivial}}$, $\mathcal{M}_{\text{crossdof}}$ in case of confusion. The detailed derivation process of $\mathcal{M}_{\text{trivial}}$, $\mathcal{M}_{\text{crossdof}}$ can be found in Section 3 of Paper 2.
-
-
+The kernel compensation solves correct desired eigenpairs with the penalty coefficient $\gamma$ chosen as $\gamma=4\pi^ 2$. We also replace the sparse matrix multiplications by matrix-free operations via FFT in 3D so that the global matrix $AMA^\dagger+\gamma B^\dagger B$ is unnecessary to assemble.  A detailed explanation of the entire discretization framework can be found in the `README_FULL` PDF. 
 
 ## Physical Parameters
 
 We consider simple cubic (`SC`),  face centered cubic (`FCC`) and body centered (`BCC`) lattices in the experiment. The expression of lattice translation vectors $\{\boldsymbol{a}_i\}_{i=1}^3$ are
+
 $$
-\begin{align}
-\left\{
-\begin{aligned}
-\text{SC lattice:\ }\quad&\boldsymbol a_1=(1,0,0)^\top, \ \ \boldsymbol a_2=(0,1,0)^\top,\ \ \boldsymbol a_3=(0,0,1)^\top.\\
-\text{FCC lattice:\ }\quad&\boldsymbol a_1=(0,\frac{1}{2},\frac{1}{2})^\top, \ \boldsymbol a_2=(\frac{1}{2},0,\frac{1}{2})^\top,\ \boldsymbol a_3=(\frac{1}{2},\frac{1}{2},0)^\top.\\
-\text{BCC lattice:\ }\quad&\boldsymbol a_1=(-\frac{1}{2},\frac{1}{2},\frac{1}{2})^\top,\ \boldsymbol a_2=(\frac{1}{2},-\frac{1}{2},\frac{1}{2})^\top,\ \boldsymbol a_3=(\frac{1}{2},\frac{1}{2},-\frac{1}{2})^\top.
-\end{aligned}
-\right.
-\end{align}
+\begin{cases}
+\text{SC lattice:\ }\quad&\boldsymbol a_1=(1,0,0), \ \ \boldsymbol a_2=(0,1,0),\ \ \boldsymbol a_3=(0,0,1).\\
+\text{FCC lattice:\ }\quad&\boldsymbol a_1=(0,\frac{1}{2},\frac{1}{2}), \ \boldsymbol a_2=(\frac{1}{2},0,\frac{1}{2}),\ \boldsymbol a_3=(\frac{1}{2},\frac{1}{2},0).\\
+\text{BCC lattice:\ }\quad&\boldsymbol a_1=(-\frac{1}{2},\frac{1}{2},\frac{1}{2}),\ \boldsymbol a_2=(\frac{1}{2},-\frac{1}{2},\frac{1}{2}),\ \boldsymbol a_3=(\frac{1}{2},\frac{1}{2},-\frac{1}{2}).
+\end{cases}
 $$
+
 The wave number vector $\mathbf{k}$ is derived from symmetry points and partition points on their connecting lines in the Brillouin zone. These symmetry points are:
 
 $$
-\begin{equation}
-\left\{
-\begin{aligned}
+\begin{cases}
 \text{SC:} \quad & \Gamma(0,0,0), L(\pi,0,0), M(\pi,\pi,0), N(\pi,\pi,\pi), \\
 \text{FCC:} \quad & X(0,2\pi,0), U\left(\frac{\pi}{2},2\pi,\pi\right), L(\pi,\pi,\pi), \Gamma(0,0,0), W(\pi,2\pi,0), K\left(\frac{3\pi}{2},\frac{3\pi}{2},0\right), \\
 \text{BCC:} \quad & H'(2\pi,0,0), \Gamma(0,0,0), P(\pi,\pi,\pi), N(\pi,0,\pi), H(0,2\pi,0).
-\end{aligned}
-\right.
-\end{equation}
+\end{cases}
 $$
 
 
@@ -188,7 +100,7 @@ $$
 
 | Module              | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
-| `discretization.py` | Mimetic finite difference discretization, construction of $\mathcal{K}_{\mathcal{A}},\mathcal{K}_{\mathcal{B}},\mathcal{K}_{\mathcal{P}}^{-1}$ |
+| `discretization.py` | Mimetic finite difference discretization, construction of matrix-free operators |
 | `lobpcg.py`         | Custom Knyazev's Locally Optimal Block Preconditioned Conjugate Gradient eigensolver. |
 | `_kernels.py`       | CUDA kernels for Python, imported by `pcfft.py`              |
 | `dielectric.py`     | I/O Dielectric tensor manipulation                           |
@@ -196,9 +108,9 @@ $$
 
 We provide several details of the programming:
 
-- **Storage** $\mathcal{K}_{\mathcal{A}}$ is stored by a $3N^3$ double-precision complex array while $\mathcal{K}_{\mathcal{B}}$ and $\mathcal{K}_{\mathcal{P}}$ are respectively stored by a tuple including a $3N^3$ double-precision float array and a $3N^3$ double-precision complex array. The overall storage of these matrix-free operators sums up to $192N^3$ Bytes. If we choose $N=100$, $N=120$ and $N=150$, then the storage is $183.11$ MiB, $316.41$ MiB and $617.98$ MiB respectively.
-- **I/O of dielectric indices** For a given lattice geometry, we record the indices of all DoFs located within the material region $\Omega_1$. These indices are categorized and stored in the `dielectric_examples` directory `edge_dofs/` and `volume_dofs/`.  Indices are stored as **integer arrays** in binary (`.bin`) format. The indexing process is vectorized and accelerated by the GPU. For standard $N^3$ grids, the total indexing and pre-processing time is **less than 1 second**.
-- **How \_kernels.py improves efficiency**  Custom `cupy.ElementwiseKernel` implementations for $\mathcal{K}_{\mathcal{A}}$ and $\mathcal{K}_{\mathcal{B}}, \mathcal{K}_{\mathcal{P}}^{-1}$ operators that deliver matrix-free efficiency **close to native C++ CUDA**.
+- **Storage** The matrix-free operations involve matrix blocks $K_A,K_B$ and $K_P^{-1}$, whose constructions can be found in Paer 2. $K_A$ is stored by a $3N^3$ double-precision complex array while $K_B$ and $K_P^{-1}$ are respectively stored by a tuple including a $3N^3$ double-precision float array and a $3N^3$ double-precision complex array. The overall storage of these matrix-free operators sums up to $192N^3$ Bytes. If we choose $N=100$, $N=120$ and $N=150$, then the storage is $183.11$ MiB, $316.41$ MiB and $617.98$ MiB respectively.
+- **I/O of dielectric indices** For a given lattice geometry, we record the indices of all DoFs located within the material region $\Omega\_1$. These indices are categorized and stored in the `dielectric_examples` directory `edge_dofs/` and `volume_dofs/`.  Indices are stored as **integer arrays** in binary (`.bin`) format. The indexing process is vectorized and accelerated by the GPU. For standard $N^3$ grids, the total indexing and pre-processing time is **less than 1 second**.
+- **How \_kernels.py improves efficiency**  Custom `cupy.ElementwiseKernel` implementations for $K_A$ and $K_B, K_P^{-1}$ operators that deliver matrix-free efficiency **close to native C++ CUDA**.
 - **Settings of LOBPCG** Our implementation is based on **Knyazev's seminal LOBPCG algorithm**, enhanced with a **soft-locking** mechanism to prevent convergence stagnation. The module provides a flexible framework supporting:
   - **Problem Types**: Simple eigenproblems ($A\boldsymbol x=\lambda \boldsymbol x$) and general eigenproblems  ($A\boldsymbol x=\lambda B\boldsymbol x$).
   - **Target Eigenvalues**: Configurable for smallest or largest magnitude.
