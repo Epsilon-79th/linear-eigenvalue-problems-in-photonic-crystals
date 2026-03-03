@@ -121,19 +121,39 @@ We provide several details of the programming:
   - **Locking Strategies**: Supports both with and without soft-locking modes.
   - **Core Routine**: The default robust solver invokes `lobpcg_sep_softlock`, which integrates these features for optimal stability.
 
+
 ### Running Examples
+There're three test modules in `paper_2/` folder:
+
+| Module              | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `numerical_experiments.py` | Assemble global matrix handle, preconditioner handle; postprocessing |
+| `paper_1_test.py`     | Test functions in Paper 1                         |
+| `paper_2_test.py`          |  Test functions in Paper 2            |
+
+To test the program, please first revise the script in the main function of the test module to run, then follow the commands below:
 
 ```bash
 cd paper_2
+```
 
-# shell (default: 0, numerical_experiments.py; 2 stands for paper_2_test.py)
+The shell file `run.sh` automatically finds a 'free' GPU (the default threshold is 100MiB, if the occupied memory is less than the threshold, then the GPU is considered to be available) to start a program, then one may use the command:
+
+```bash
+# shell (default: 0, stands for numerical_experiments.py; 1,2 stands for paper_1,2_test.py)
 ./run.sh
 ./run.sh 0
+./run.sh 1
 ./run.sh 2
+```
 
-# python
-python paper_2_test.py
+A direct command for running certain test module is also allowed:
+
+```bash
+# python (direct command)
 python numerical_experiments.py
+python paper_1_test.py
+python paper_2_test.py
 ```
 
 ## Numerical Results
