@@ -1,6 +1,7 @@
 # Linear Eigenproblems in Photonic Crystals
 
 **Version:** [![Python](https://img.shields.io/badge/Python-3.12%2B-green)](https://www.python.org/) [![MATLAB](https://img.shields.io/badge/MATLAB-R2023a%2B-blue)](https://www.mathworks.com/)
+
 **Papers:** [![Paper1](https://img.shields.io/badge/DOI-Paper%201-007ec6)](https://doi.org/10.1002/num.23171) [![Paper2](https://img.shields.io/badge/DOI-Paper%202-007ec6)](https://doi.org/10.48550/arXiv.2511.17107)
 
 **Platform:** [![GPU](https://img.shields.io/badge/GPU-RTX_4090_24GB-76b900?style=flat&logo=nvidia)]() [![CUDA](https://img.shields.io/badge/CUDA-12.4-76b900?style=flat)]()
@@ -35,7 +36,10 @@ The structure of the repository is outlined as follows:
 │   ├── pcfft.py                 # FFT-based matrix-free operations
 │   └── run.sh                   # Shell for quick start
 ├── pic/                     # Visualization assets
-└── README.md
+├── README.md				 # Readme markdown (simplified, math theory left out).
+├── (Paper 1) ... .pdf		 # Paper 1 PDF.
+├── (Paper 2) ... .pdf		 # Paper 2 PDF.
+└──	README_FULL.pdf			 # Readme full version.
 ```
 
 ## Mathematical Theory
@@ -101,7 +105,7 @@ $$
 | Module              | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | `discretization.py` | Mimetic finite difference discretization, construction of matrix-free operators |
-| `lobpcg.py`         | Custom Knyazev's Locally Optimal Block Preconditioned Conjugate Gradient eigensolver. |
+| `lobpcg.py`         | Custom Knyazev's Locally Optimal Block Preconditioned Conjugate Gradient eigensolver |
 | `_kernels.py`       | CUDA kernels for Python, imported by `pcfft.py`              |
 | `dielectric.py`     | I/O Dielectric tensor manipulation                           |
 | `pcfft.py`          | FFT-based matrix-free operations.                            |
