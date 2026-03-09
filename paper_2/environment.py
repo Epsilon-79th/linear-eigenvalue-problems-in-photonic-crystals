@@ -26,15 +26,6 @@ SCAL = 1                      # Lattice scaling constant.
 TOL = 1e-5                    # Tolerance.
 GAP = 20                      # Segmentation of the Brillouin zone.
 
-# Chiral constants (positive real).
-CHIRAL_EPS_EG = {"sc_curv":13.0, "bcc_sg":16.0, "bcc_dg":16.0, "fcc":13.0}
-
-# Pseudochiral constants (Hermitian postive definite, 3*3). 
-PSEUDOCHIRAL_EPS_LOC = [np.array([(1+0.875**2)**0.5, (1+0.875**2)**0.5, 1.0, -1j*0.875, 0.0, 0.0]),\
-                        np.array([(1+0.875**2)**0.5, 1.0, (1+0.875**2)**0.5, 0.0, 1j*0.875, 0.0]),\
-                        np.array([1.0346,0.5059,0.2595, -0.0163-0.2319j, 0.027+0.0827j, -0.2743-0.0076j]),\
-                        np.array([3.0, 3.0, 3.0, np.sqrt(3)+1j, 1j, np.sqrt(2)*(1+1j)])/5.0]
-
 # Linear/Eigensolver settings.
 MAXITER = 500
 RESTART_MAX = 100
@@ -53,6 +44,16 @@ TYPE0 = "chiral"
 TYPE1 = "pseudochiral_trivial"
 TYPE2 = "pseudochiral_crossdof"
 TYPE3 = "pseudochiral_crossdof2"
+
+# Chiral constants (positive real).
+CHIRAL_EPS_EG = {SC_F1:13.0, SC_F2:13.0, SC_C:13.0, BCC_SG:16.0, BCC_DG:16.0, FCC:13.0}
+
+# Pseudochiral constants (Hermitian postive definite, 3*3). 
+PSEUDOCHIRAL_EPS_LOC = [np.array([(1+0.875**2)**0.5, (1+0.875**2)**0.5, 1.0, -1j*0.875, 0.0, 0.0]),\
+                        np.array([(1+0.875**2)**0.5, 1.0, (1+0.875**2)**0.5, 0.0, 1j*0.875, 0.0]),\
+                        np.array([1.0346,0.5059,0.2595, -0.0163-0.2319j, 0.027+0.0827j, -0.2743-0.0076j]),\
+                        np.array([3.0, 3.0, 3.0, np.sqrt(3)+1j, 1j, np.sqrt(2)*(1+1j)])/5.0]
+
 
 # Robust square root.
 sqrt_robust = lambda x: 0 if x<1e-10 else x**0.5

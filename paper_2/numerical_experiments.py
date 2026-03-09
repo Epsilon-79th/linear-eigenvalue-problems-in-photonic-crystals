@@ -352,7 +352,7 @@ def bandgap(n, d_flag, solver = lobpcg_sep_softlock, type = TYPE0, eps_opt = 0, 
     d_fft, di_fft = mfd.fft_blocks(n, K, ct)
     
     # Path and keywords.
-    path_bandgap = "../output/" + type + "/bandgap_" + d_flag + str(eps_opt) + ".json"
+    path_bandgap = OUTPUT_PATH + type + "/bandgap_" + d_flag + ".json"
     var_name_it = d_flag + "_" + str(n) + "_iterations"
     var_name_fq = d_flag + "_" + str(n) + "_frequencies"
 
@@ -464,8 +464,10 @@ def bandgap(n, d_flag, solver = lobpcg_sep_softlock, type = TYPE0, eps_opt = 0, 
             gap_rec_it[indices[i]] = iters.tolist()
             gap_rec_fq[indices[i]] = lambdas_re.tolist()  
         
-        except Exception:
+        except Exception as e:
             # If nan/blowup occurs, set error record (-1) and print warning.
+            print(f"{RED}WARNING: Error occurs.")
+            print(f"Error message: {e}{RESET}")
             err_index.append(indices[i])
             lambdas_re = -1.0 * np.ones(NEV)
             x = cp.random.rand(3 * nn, m) + 1j * cp.random.rand(3 * nn, m)
@@ -483,7 +485,7 @@ def bandgap(n, d_flag, solver = lobpcg_sep_softlock, type = TYPE0, eps_opt = 0, 
             json.dump(gap_lib, file, indent=4)
             
         t_o = owari()
-        print(f"Gap info library ({d_flag}) is updated ({indices[i]+1}/{n_pt*gap}), time = {t_o-t_h:<6.3f}s.")
+        print(f"{CYAN}Gap info library ({d_flag}) is updated ({indices[i]+1}/{n_pt*gap}), time = {t_o-t_h:<6.3f}s.{RESET}")
     
     if len(err_index) > 0:
         print(f"{RED}Error occurs to following indices:{RESET}")
@@ -496,8 +498,9 @@ def bandgap(n, d_flag, solver = lobpcg_sep_softlock, type = TYPE0, eps_opt = 0, 
 def main():
     #  Order: CUDA_VISIBLE_DEVICES= _ python numerical_experiments.py
 
-    eigen_1p(120, BCC_DG, np.array([pi,0,0]), nev=10, type = TYPE1, solver=lobpcg_sep_softlock)
-    #bandgap(120, d_flag=SC_C, type=TYPE2)
+    #eigen_1p(120, BCC_DG, np.array([pi,0,0]), nev=10, type = TYPE1, solver=lobpcg_sep_softlock)
+
+    bandgap(120, d_flag=SC_F2, type=TYPE0)
     #bandgap(120, d_flag=FCC, type=TYPE2)
     #bandgap(120, d_flag=BCC_SG, type=TYPE2)
     #bandgap(120, d_flag=BCC_DG, type=TYPE0)

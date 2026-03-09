@@ -44,7 +44,7 @@ def set_relaxation(alpha, scal=SCAL):
         pnt = 4*pi*pi
     else:
         opt = (nrm_alpha, 0.6)
-        pnt = (2*pi / nrm_alpha)
+        pnt = (2*pi / nrm_alpha)**2
     
     return opt,pnt
 
