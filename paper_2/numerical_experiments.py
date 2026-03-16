@@ -500,7 +500,7 @@ def main():
 
     #eigen_1p(120, BCC_DG, np.array([pi,0,0]), nev=10, type = TYPE1, solver=lobpcg_sep_softlock)
 
-    bandgap(120, d_flag=SC_F2, type=TYPE0)
+    bandgap(100, d_flag=SC_F2, type=TYPE0)
     #bandgap(120, d_flag=FCC, type=TYPE2)
     #bandgap(120, d_flag=BCC_SG, type=TYPE2)
     #bandgap(120, d_flag=BCC_DG, type=TYPE0)
