@@ -143,6 +143,52 @@ def largek_cmp(Ns):
     
     return
 
+def largek_smooth_cmp(Ns):
+    
+    m0, m = 8,12
+    results = cp.zeros((m0, len(Ns)))
+
+    N2k = lambda N: 5#max(4,round(16.30*np.log(N-10)-58.12))
+    eps_func = lambda x,y,z:8.9*np.sin(2*pi*(x+y+z))+13.0
+
+    def _smooth_diel(N):
+        I,J,K = cp.tile(cp.arange(N), N * N), cp.tile(cp.repeat(cp.arange(N), N),N), cp.repeat(cp.arange(N), N * N)
+        dofs = cp.vstack((cp.column_stack(((I+0.5)/N, J/N, K/N)), 
+                          cp.column_stack((I/N, (J+0.5)/N, K/N)), 
+                          cp.column_stack((I/N, J/N, (K+0.5)/N))))
+        diel_mat = 1.0/eps_func(dofs[:,0], dofs[:,1], dofs[:,2])
+        return diel_mat
+    
+    for i in range(len(Ns)):
+        N = Ns[i]
+        k = N2k(N)
+        a_fft, b_fft, inv_fft, _ , _ = uniform_initialization(N, "sc_curv", np.array([pi,pi,pi]),k=k)
+        x0 = cp.random.rand(3*N*N*N,m) + 1j * cp.random.rand(3*N*N*N,m)
+
+        diel_mat = cp.asarray(_smooth_diel(N))
+        Diels = lambda x: mfd.x_mul_y(diel_mat, x)
+        A_func, H_func, P_func = pc_mfd_handle(a_fft, b_fft, Diels, inv_fft, shift=0.0)
+        lambdas, x , _ = lobpcg_sep_softlock(H_func, P_func, x0, m0)
+        _ , lambdas = recompute_normalize_print(lambdas, x, A_func)
+        results[:,i] = lambdas[:m0]
+
+        print(f"N = {N} is done computing.")
+    
+    print("\nResults:")
+    for i in range(m0):
+        print(f"i = {i+1:3d}:\t {results[i,0]:13.6f}",end=", ")
+        diff1 = np.abs(results[i,1] - results[i,0])
+        diff_ = diff1
+        print(f"{results[i,1]:13.6f}  ({diff1:6.3e})",end=", ")
+        for j in range(2,len(Ns)):
+            diff2 = np.abs(results[i,j] - results[i,j-1])
+            print(f"{results[i,j]:13.6f}  ({diff2:<6.3e}, {np.log(diff1/diff2)/np.log(2):5.2f})",end=", ")
+            diff1 = diff2
+        print(f"avg ord = {np.log(diff_/diff1)/np.log(2)/(len(Ns)-2):5.2f}.")
+        
+    
+    return  
+
 
 """
     Tests
@@ -356,8 +402,10 @@ def precision_test(d_flag=SC_C, alpha=np.array([pi,pi,pi])):
 
 def main():
 
-    compute_extreme_case(120, d_flag=SC_C, type = TYPE1)
-    compute_extreme_case(120, d_flag=SC_C, type = TYPE2)
+    #compute_extreme_case(120, d_flag=SC_C, type = TYPE1)
+    #compute_extreme_case(120, d_flag=SC_C, type = TYPE2)
+    
+    largek_smooth_cmp([16,32,64,128])
     return
     
 if __name__ == "__main__":

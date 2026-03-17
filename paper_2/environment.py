@@ -23,7 +23,7 @@ DIEL_PATH = "dielectric_examples/"
 K = 1                         # Stencil length.
 NEV = 10                      # Number of desired eigenpairs.
 SCAL = 1                      # Lattice scaling constant.
-TOL = 1e-5                    # Tolerance.
+TOL = 1e-4                    # Tolerance.
 GAP = 20                      # Segmentation of the Brillouin zone.
 
 # Linear/Eigensolver settings.
